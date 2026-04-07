@@ -29,12 +29,12 @@ import {
   Loader2,
   DollarSign,
   Building2,
+  Settings,
 } from "lucide-react";
 import { UserRole } from "@/types";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useLocalizationContext } from "@/components/providers/LocalizationProvider";
 import { ComplianceDetailSkeleton } from "@/components/compliance/compliance-skeleton";
-import { ComplianceStatusManager } from "@/components/compliance/compliance-status-manager";
 
 import {
   Dialog,
@@ -57,6 +57,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ComplianceActions } from "@/components/compliance/compliance-actions";
+import { ComplianceStatusChanger } from "@/components/compliance/compliance-status-manager";
 
 interface ComplianceReportDetail {
   _id: string;
@@ -325,7 +327,7 @@ export default function ComplianceReportDetailPage() {
               </Link>
             )}
 
-          <ComplianceStatusManager
+          <ComplianceActions
             report={report}
             onStatusUpdate={(id, newStatus) =>
               setReport((prev) =>
@@ -471,6 +473,22 @@ export default function ComplianceReportDetailPage() {
               )}
             </CardContent>
           </Card>
+          {/* Status Management */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                {t("leases.details.status.title")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ComplianceStatusChanger
+                report={report}
+                onUpdate={fetchComplianceReport}
+                disabled={actionLoading}
+              />
+            </CardContent>
+          </Card>
         </div>
       </div>
 
@@ -573,7 +591,7 @@ export default function ComplianceReportDetailPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Mark as Expired?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to mark this compliance report as expired? 
+              Are you sure you want to mark this compliance report as expired?
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -13,6 +13,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -33,235 +43,287 @@ import {
   AlertTriangle,
   CheckCircle,
   FileCheck,
-  Trash2,
-  X,
 } from "lucide-react";
-import {
-  DeleteConfirmationDialog,
-  CancelConfirmationDialog,
-} from "@/components/ui/confirmation-dialog";
 import { UserRole } from "@/types";
+
+// Adjust these enums/types to match your actual ComplianceReport model
+type ComplianceStatus = "active" | "expired" | "pending" | "revoked";
 
 interface ComplianceReport {
   _id: string;
-  complianceType: string;
-  status: "active" | "expired" | "pending" | "revoked";
+  status: ComplianceStatus;
   // ... other fields you might need
 }
 
-interface ComplianceActionsProps {
+interface ComplianceStatusManagerProps {
   report: ComplianceReport;
-  userRole: UserRole;
-  onUpdate: () => void;
-  onDelete: () => void;
-  onView: () => void;
-  onEdit: () => void;
+  onStatusUpdate?: (reportId: string, newStatus: ComplianceStatus) => void;
+  onReportUpdate?: () => void;
+}
+
+interface StatusAction {
+  action: string;
+  label: string;
+  icon: React.ComponentType<any>;
+  variant: "default" | "destructive" | "outline" | "secondary";
+  requiresConfirmation?: boolean;
+  requiresInput?: boolean;
 }
 
 export function ComplianceActions({
   report,
-  userRole,
-  onUpdate,
-  onDelete,
-  onView,
-  onEdit,
-}: ComplianceActionsProps) {
+  onStatusUpdate,
+  onReportUpdate,
+}: ComplianceStatusManagerProps) {
   const { data: session } = useSession();
   const router = useRouter();
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [revokeDialogOpen, setRevokeDialogOpen] = useState(false);
-  const [renewDialogOpen, setRenewDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showRevokeDialog, setShowRevokeDialog] = useState(false);
+  const [selectedAction, setSelectedAction] = useState<StatusAction | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
-  const [newExpiryDate, setNewExpiryDate] = useState("");
 
-  const canEdit = [UserRole.ADMIN, UserRole.MANAGER].includes(userRole);
-  const canDelete = [UserRole.ADMIN, UserRole.MANAGER].includes(userRole);
-  const canRevoke = [UserRole.ADMIN, UserRole.MANAGER].includes(userRole);
-  const canRenew = [UserRole.ADMIN, UserRole.MANAGER].includes(userRole);
-  const canMarkExpired = [UserRole.ADMIN, UserRole.MANAGER].includes(userRole);
+  const userRole = session?.user?.role as UserRole;
+  const canManage = [UserRole.ADMIN, UserRole.MANAGER].includes(userRole);
 
-  const handleAction = async (action: string, data?: any) => {
+  // Define available actions based on current status and permissions
+  const getAvailableActions = (): StatusAction[] => {
+    const actions: StatusAction[] = [];
+
+    // View is always available
+    actions.push({
+      action: "view",
+      label: "View Details",
+      icon: Eye,
+      variant: "outline",
+    });
+
+    // Edit allowed for non-final states
+    if (report.status !== "expired" && report.status !== "revoked") {
+      actions.push({
+        action: "edit",
+        label: "Edit Report",
+        icon: Edit,
+        variant: "outline",
+      });
+    }
+
+    switch (report.status) {
+      case "pending":
+        if (canManage) {
+          actions.push({
+            action: "approve",
+            label: "Mark as Active",
+            icon: CheckCircle,
+            variant: "default",
+            requiresConfirmation: true,
+          });
+        }
+        break;
+
+      case "active":
+        if (canManage) {
+          actions.push({
+            action: "renew",
+            label: "Renew Certificate",
+            icon: RefreshCw,
+            variant: "default",
+            // You could add requiresInput if you want to collect new expiry date here
+          });
+          actions.push({
+            action: "revoke",
+            label: "Revoke Certificate",
+            icon: Ban,
+            variant: "destructive",
+            requiresInput: true,
+          });
+        }
+        break;
+
+      case "expired":
+      case "revoked":
+        // For final states — only view + possibly re-activate if allowed
+        if (canManage) {
+          actions.push({
+            action: "reactivate",
+            label: "Reactivate",
+            icon: CheckCircle,
+            variant: "default",
+            requiresConfirmation: true,
+          });
+        }
+        break;
+    }
+
+    // Always allow manual expiry override for admins/managers
+    if (canManage && report.status === "active") {
+      actions.push({
+        action: "markExpired",
+        label: "Mark as Expired",
+        icon: AlertTriangle,
+        variant: "destructive",
+        requiresConfirmation: true,
+      });
+    }
+
+    return actions;
+  };
+
+  // Handle API status update
+  const handleStatusUpdate = async (action: string, extraData: any = {}) => {
     try {
-      setActionLoading(action);
+      setIsLoading(true);
 
-      const response = await fetch(`/api/compliance/${report._id}`, {
+      const res = await fetch(`/api/compliance/${report._id}/status`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
-          ...data,
+          ...extraData,
         }),
       });
 
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.error || `Failed to ${action} compliance report`
-        );
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Failed to update compliance status");
       }
 
-      toast.success(`Compliance report ${action} successfully!`);
-      onUpdate();
-    } catch (error: any) {
-      toast.error(error?.message || `Failed to ${action} compliance report`);
+      const result = await res.json();
+
+      toast.success(`Report updated: ${action} successful`);
+
+      if (onStatusUpdate && result.data?.status) {
+        onStatusUpdate(report._id, result.data.status);
+      }
+      if (onReportUpdate) {
+        onReportUpdate();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update status");
     } finally {
-      setActionLoading(null);
+      setIsLoading(false);
+      setShowConfirmDialog(false);
+      setShowRevokeDialog(false);
+      setSelectedAction(null);
+      setRevokeReason("");
     }
   };
 
-  const handleRevoke = async () => {
+  const handleActionClick = (action: StatusAction) => {
+    setSelectedAction(action);
+
+    if (action.action === "view") {
+      router.push(`/dashboard/compliance/${report._id}`);
+      return;
+    }
+
+    if (action.action === "edit") {
+      router.push(`/dashboard/compliance/${report._id}/edit`);
+      return;
+    }
+
+    if (action.requiresInput) {
+      if (action.action === "revoke") {
+        setShowRevokeDialog(true);
+      }
+    } else if (action.requiresConfirmation) {
+      setShowConfirmDialog(true);
+    } else {
+      handleStatusUpdate(action.action);
+    }
+  };
+
+  const handleRevoke = () => {
     if (!revokeReason.trim()) {
       toast.error("Please provide a reason for revocation");
       return;
     }
-
-    await handleAction("revoke", { reason: revokeReason.trim() });
-    setRevokeDialogOpen(false);
-    setRevokeReason("");
+    handleStatusUpdate("revoke", { reason: revokeReason.trim() });
   };
 
-  const handleRenew = async () => {
-    if (!newExpiryDate) {
-      toast.error("Please select a new expiry date");
-      return;
-    }
-
-    await handleAction("renew", { newExpiryDate });
-    setRenewDialogOpen(false);
-    setNewExpiryDate("");
-  };
-
-  const handleMarkExpired = async () => {
-    await handleAction("markExpired");
-  };
-
-  const handleDelete = async () => {
-    try {
-      setActionLoading("delete");
-
-      const response = await fetch(`/api/compliance/${report.id}`, {
-        method: "DELETE",
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || "Failed to delete compliance report");
-      }
-
-      toast.success("Compliance report deleted successfully!");
-      onDelete();
-    } catch (error: any) {
-      toast.error(error?.message || "Failed to delete compliance report");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  const availableActions = getAvailableActions();
 
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
+          <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isLoading}>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-          <DropdownMenuItem onClick={onView}>
-            <Eye className="mr-2 h-4 w-4" />
-            View Details
-          </DropdownMenuItem>
-
-          {canEdit && report.status !== "expired" && report.status !== "revoked" && (
-            <DropdownMenuItem onClick={onEdit}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit Report
-            </DropdownMenuItem>
+        <DropdownMenuContent align="end" className="w-56">
+          {availableActions.length > 0 && (
+            <>
+              <DropdownMenuLabel>Compliance Actions</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+            </>
           )}
 
-          {/* Status-based actions */}
-          {report.status === "pending" && canEdit && (
-            <>
-              <DropdownMenuSeparator />
+          {availableActions.map((action) => {
+            const Icon = action.icon;
+            return (
               <DropdownMenuItem
-                onClick={() => handleAction("approve")}
-                className="text-green-600"
+                key={action.action}
+                onClick={() => handleActionClick(action)}
+                className={
+                  action.variant === "destructive"
+                    ? "text-red-600 focus:text-red-600 focus:bg-red-50"
+                    : action.variant === "default"
+                    ? "text-blue-600 focus:text-blue-600 focus:bg-blue-50"
+                    : ""
+                }
+                disabled={isLoading}
               >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Mark as Active
+                <Icon className="mr-2 h-4 w-4" />
+                {action.label}
               </DropdownMenuItem>
-            </>
-          )}
-
-          {report.status === "active" && canRenew && (
-            <DropdownMenuItem onClick={() => setRenewDialogOpen(true)}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Renew Certificate
-            </DropdownMenuItem>
-          )}
-
-          {report.status === "active" && canMarkExpired && (
-            <DropdownMenuItem
-              onClick={handleMarkExpired}
-              className="text-orange-600"
-            >
-              <AlertTriangle className="mr-2 h-4 w-4" />
-              Mark as Expired
-            </DropdownMenuItem>
-          )}
-
-          {report.status === "active" && canRevoke && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setRevokeDialogOpen(true)}>
-                <Ban className="mr-2 h-4 w-4" />
-                Revoke Certificate
-              </DropdownMenuItem>
-            </>
-          )}
-
-          {/* Destructive actions */}
-          {canDelete && report.status !== "revoked" && (
-            <>
-              <DropdownMenuSeparator />
-              <DeleteConfirmationDialog
-                itemName={report.complianceType}
-                itemType="compliance report"
-                onConfirm={handleDelete}
-                loading={actionLoading === "delete"}
-              >
-                <DropdownMenuItem
-                  onSelect={(e) => e.preventDefault()}
-                  className="text-red-600"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete Report
-                </DropdownMenuItem>
-              </DeleteConfirmationDialog>
-            </>
-          )}
+            );
+          })}
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Revoke Dialog */}
-      <Dialog open={revokeDialogOpen} onOpenChange={setRevokeDialogOpen}>
+      {/* Generic Confirmation Dialog */}
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Action</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to {selectedAction?.label.toLowerCase()} this compliance report? 
+              {selectedAction?.action === "markExpired" && " This will mark it as expired immediately."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleStatusUpdate(selectedAction?.action || "")}
+              disabled={isLoading}
+              className={
+                selectedAction?.variant === "destructive"
+                  ? "bg-red-600 hover:bg-red-700"
+                  : ""
+              }
+            >
+              {isLoading ? "Processing..." : "Confirm"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Revoke Dialog with Reason */}
+      <Dialog open={showRevokeDialog} onOpenChange={setShowRevokeDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Revoke Compliance Certificate</DialogTitle>
             <DialogDescription>
-              Provide a reason for revoking "{report.complianceType}". This action cannot be undone.
+              Provide a reason for revoking this certificate. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="revoke-reason">Revocation Reason</Label>
+              <Label htmlFor="revoke-reason">Reason for Revocation</Label>
               <Textarea
                 id="revoke-reason"
-                placeholder="e.g., Failed inspection, documentation issues, non-compliance..."
+                placeholder="Enter detailed reason (e.g., failed inspection, non-compliance...)"
                 value={revokeReason}
                 onChange={(e) => setRevokeReason(e.target.value)}
                 rows={4}
@@ -269,58 +331,15 @@ export function ComplianceActions({
             </div>
           </div>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRevokeDialogOpen(false)}
-              disabled={actionLoading === "revoke"}
-            >
+            <Button variant="outline" onClick={() => setShowRevokeDialog(false)} disabled={isLoading}>
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={handleRevoke}
-              disabled={actionLoading === "revoke" || !revokeReason.trim()}
+              disabled={isLoading || !revokeReason.trim()}
             >
-              {actionLoading === "revoke" ? "Revoking..." : "Revoke Certificate"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Renew Dialog */}
-      <Dialog open={renewDialogOpen} onOpenChange={setRenewDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Renew Compliance Certificate</DialogTitle>
-            <DialogDescription>
-              Set a new expiry date for "{report.complianceType}".
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="new-expiry">New Expiry Date</Label>
-              <Input
-                id="new-expiry"
-                type="date"
-                value={newExpiryDate}
-                onChange={(e) => setNewExpiryDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setRenewDialogOpen(false)}
-              disabled={actionLoading === "renew"}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleRenew}
-              disabled={actionLoading === "renew" || !newExpiryDate}
-            >
-              {actionLoading === "renew" ? "Renewing..." : "Renew Certificate"}
+              {isLoading ? "Revoking..." : "Revoke Certificate"}
             </Button>
           </DialogFooter>
         </DialogContent>

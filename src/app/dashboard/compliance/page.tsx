@@ -32,7 +32,7 @@ import { DataTable, DataTableColumn } from "@/components/ui/data-table";
 import { useViewPreferencesStore } from "@/stores/view-preferences.store";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLocalizationContext } from "@/components/providers/LocalizationProvider";
-import { ComplianceStatusManager } from "@/components/compliance/compliance-status-manager";
+import { ComplianceActions } from "@/components/compliance/compliance-actions";
 
 interface ComplianceReport {
   _id: string;
@@ -257,7 +257,7 @@ const viewMode = useViewPreferencesStore((state) => state.maintenanceView);
       header: "Actions",
       align: "right",
       cell: (report) => (
-        <ComplianceStatusManager
+        <ComplianceActions
           report={report}
           onStatusUpdate={handleStatusUpdate}
           onReportUpdate={handleReportUpdate}
