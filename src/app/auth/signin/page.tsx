@@ -105,7 +105,7 @@ export default function SignInPage() {
       <div className="max-w-lg w-full space-y-8">
         {/* Header */}
         <div className="text-center">
-          <div className="flex justify-center items-center">
+          {/* <div className="flex justify-center items-center">
             {logoError ? (
               <Building2 className="h-14 w-14 text-blue-600 dark:text-blue-400" />
             ) : (
@@ -130,7 +130,7 @@ export default function SignInPage() {
                 priority
               />
             )}
-          </div>
+          </div> */}
           <h2 className="mt-6 text-3xl font-extrabold text-gray-900 dark:text-gray-100">
             Sign in to your account
           </h2>
