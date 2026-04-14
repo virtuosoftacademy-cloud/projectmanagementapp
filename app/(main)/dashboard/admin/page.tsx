@@ -10,7 +10,7 @@ import { redirect } from "next/navigation";
 
 const AdminPage = async () => {
 
-    const user = await apiClient.GetCurrentUser()
+    const user = await getCurrentUser()
     if (!user || !checkUserPermission(user, Role.ADMIN)) {
         redirect("/unauthorized")
     }

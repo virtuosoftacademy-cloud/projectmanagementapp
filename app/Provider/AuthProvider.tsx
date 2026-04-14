@@ -18,7 +18,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
     try {
-      const data = await apiClient.Login(email, password)as unknown as { user: User };
+      const data = await apiClient.Login(email, password) as unknown as { user: User };
       setUser(data.user);
       return { success: true, user: data.user };
     } catch (e) {
@@ -55,7 +55,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const loadUser = async () => {
       try {
         const data = await apiClient.GetCurrentUser();
-        setUser(data.user||null);
+        setUser(data.user || null);
       } catch (e) {
         console.error("Failed to load user profile:", e);
       }
@@ -76,11 +76,11 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 }
 
 export const useAuth = () => {
-    const context = useContext(AuthContext);  
-    if (context === undefined) {
-      throw new Error(`useAuth must be used within an AuthProvider`);
-    } 
-    return context;
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error(`useAuth must be used within an AuthProvider`);
+  }
+  return context;
 }
 
 export default AuthProvider;

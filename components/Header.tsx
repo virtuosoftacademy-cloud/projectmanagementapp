@@ -10,18 +10,21 @@ interface HeaderProps {
 }
 
 const Header = ({ user }: HeaderProps) => {
+    
     const pathname = usePathname();
     const navigation = [
         { name: "Home", href: "/", show: true },
         { name: "Dashboard", href: "/dashboard", show: true },
     ].filter(item => item.show);
+
     const getNavItemClass = (href: string) => {
         return pathname === href ? "text-blue-500" : "text-gray-700";
     }
+    
     return (
         <div>
-            <header className="border-b border-slate-700 p-6">
-                <div className="container max-w-4xl mx-auto flex items-center justify-between">
+            <header className="border-b border-slate-700 px-20 py-6">
+                <div className="container mx-auto flex items-center justify-between">
                     {/* Logo */}
                     <Link href={"/"}>TeamAccess</Link>
 

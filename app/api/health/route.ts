@@ -1,3 +1,4 @@
+
 import { checkConnection } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 
