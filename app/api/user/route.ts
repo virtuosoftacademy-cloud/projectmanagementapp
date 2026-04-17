@@ -52,7 +52,9 @@ export async function GET(req: NextRequest) {
         });
         return NextResponse.json({users});
     } catch (error) {
-        console.error(`Get Users Error: ${error}`);
-        return NextResponse.json({ error: "Internal Server Error, Something went wrong!" }, { status: 500 });
+        console.error(`Error In Getting Users : ${error}`);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }
+
+    

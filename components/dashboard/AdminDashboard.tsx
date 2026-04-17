@@ -20,21 +20,22 @@ const AdminDashboard = ({
     const [isPending, startTransition] = useTransition();
     const router = useRouter()
 
-    const handleRemoveMember = async (userId: string, teamId: string | null) => {
+    const handleRemoveMember = async (userId: string) => {
         startTransition(async () => {
             try {
-                await apiClient.AssignUserToTeam(userId, teamId);
+                await apiClient.deleteUser(userId);
                 router.refresh();
-                toast.success(`Team Changed`)
+                toast.success(`User Deleted Successfully`)
             } catch (error) {
                 alert(
                     error instanceof Error
                         ? error.message
-                        : "Error updating team assignment"
+                        : "Error deletion"
                 )
             }
         })
     }
+
     const handleTeamAssignment = async (userId: string, teamId: string | null) => {
         startTransition(async () => {
             try {
@@ -199,18 +200,14 @@ const AdminDashboard = ({
                                                         )
                                                     }
                                                 </td>
-                                                <td className="py-2">
-                                                    {
-                                                        user.teamId && (
+                                                <td className="py-2">    
                                                             <Button
-                                                                onClick={() => handleRemoveMember(user.id, null)}
+                                                                onClick={() => handleRemoveMember(user.id)}
                                                                 disabled={isPending}
                                                                 variant={"destructive"}
                                                             >
                                                                 Remove
                                                             </Button>
-                                                        )
-                                                    }
                                                 </td>
                                             </tr>
                                         ))
