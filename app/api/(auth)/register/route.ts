@@ -43,8 +43,8 @@ export async function POST(request: NextRequest) {
         const response = NextResponse.json({
             user: {
                 id: user.id,
-                name: user.name,
-                email: user.email,
+                name: user.name.toLocaleLowerCase(),
+                email: user.email.toLocaleLowerCase(),
                 teamId: user.teamId,
                 team: user.team,
                 role: user.role,

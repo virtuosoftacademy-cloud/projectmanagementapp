@@ -33,7 +33,7 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiClient.Logout();
       setUser(null);
-      window.location.href = "/login";
+      window.location.href = "/auth/login";
     } catch (e) {
       console.error("Logout error:", e);
     }

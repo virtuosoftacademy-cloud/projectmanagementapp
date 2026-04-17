@@ -55,18 +55,18 @@ class ApiClient {
 
     //User Methods
     async GetUsers() {
-        return this.request("/user")
+        return this.request("/users")
     }
 
     async UpdateUserRole(userId: string, role: string) {
-        return this.request(`/user/${userId}/role`, {
+        return this.request(`/users/${userId}/role`, {
             method: "PATCH",
             body: JSON.stringify({ role })
         })
     }
 
     async AssignUserToTeam(userId: string, teamId: string | null) {
-        return this.request(`/user/${userId}/team`, {
+        return this.request(`/users/${userId}/team`, {
             method: "PATCH",
             body: JSON.stringify({ teamId })
         })

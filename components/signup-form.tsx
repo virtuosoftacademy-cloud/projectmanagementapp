@@ -50,15 +50,15 @@ function SignupForm({ ...props }: React.ComponentProps<typeof Card>) {
   );
   useEffect(() => {
     if (!state?.success) return;
-    toast.success("Registration Successfull!")
+    toast.success(state.success || "Registration Successfull!")
 
     const timer = setTimeout(() => {
       router.push("/auth/login");
-    }, 800)
+    }, 200)
 
     return () => clearTimeout(timer)
   }, [state?.success, router])
-  
+
   return (
     <>
       <Card {...props}>

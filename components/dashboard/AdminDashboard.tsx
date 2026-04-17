@@ -5,13 +5,13 @@ import { Role, Team, User } from "@/app/types";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Button } from "../ui/button";
+import { toast } from "sonner";
 
 interface AdminDashboardProps {
     users: User[],
     teams: Team[],
-    currentUser: User[],
+    currentUser: User,
 }
-
 const AdminDashboard = ({
     users,
     teams,
@@ -20,10 +20,27 @@ const AdminDashboard = ({
     const [isPending, startTransition] = useTransition();
     const router = useRouter()
 
+    const handleRemoveMember = async (userId: string, teamId: string | null) => {
+        startTransition(async () => {
+            try {
+                await apiClient.AssignUserToTeam(userId, teamId);
+                router.refresh();
+                toast.success(`Team Changed`)
+            } catch (error) {
+                alert(
+                    error instanceof Error
+                        ? error.message
+                        : "Error updating team assignment"
+                )
+            }
+        })
+    }
     const handleTeamAssignment = async (userId: string, teamId: string | null) => {
         startTransition(async () => {
             try {
                 await apiClient.AssignUserToTeam(userId, teamId);
+                router.refresh();
+                toast.success(`Team Changed`)
             } catch (error) {
                 alert(
                     error instanceof Error
@@ -43,6 +60,7 @@ const AdminDashboard = ({
             try {
                 await apiClient.UpdateUserRole(userId, newRole);
                 router.refresh();
+                toast.success(`Role Changed`)
             } catch (error) {
                 alert(
                     error instanceof Error
@@ -59,6 +77,40 @@ const AdminDashboard = ({
                 <div>
                     <h2 className="text-2xl font-bold">Admin Dashboard</h2>
                     <p >User & Team Management</p>
+                </div>
+                {/* Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6">
+                    <div className="border border-slate-700 rounded-lg p-6 text-center">
+                        <div className="text-2xl font-bold text-gray-700">
+                            {users.length}
+                        </div>
+                        Total Users
+                    </div>
+                    <div className="border border-slate-700 rounded-lg p-6 text-center">
+                        <div className="text-2xl font-bold text-gray-700">
+                            {users.filter(user => user.role === Role.ADMIN).length}
+                        </div>
+                        Admin
+                    </div>
+                    <div className="border border-slate-700 rounded-lg p-6 text-center">
+                        <div className="text-2xl font-bold text-gray-700">
+                            {users.filter(user => user.role === Role.MANAGER).length}
+                        </div>
+                        Managers
+                    </div>
+                    <div className="border border-slate-700 rounded-lg p-6 text-center">
+                        <div className="text-2xl font-bold text-gray-700">
+                            {users.filter(user => user.role === Role.USER).length}
+                        </div>
+                        Users
+                    </div>
+                    <div className="border border-slate-700 rounded-lg p-6 text-center">
+                        <div className="text-2xl font-bold text-gray-700">
+                            {teams.length}
+                        </div>
+                        Teams
+                    </div>
+
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                     {/*Users table with role and team assignment*/}
@@ -109,12 +161,17 @@ const AdminDashboard = ({
                                                     </div>
                                                 </td>
                                                 <td className="py-2">
-                                                    <select onChange={(e) => { handleRoleAssignment(user.id, e.target.value as Role) }} disabled={isPending || user.id === currentUser.id}>
+                                                    <select
+                                                        value={user.role}
+                                                        onChange={(e) => {
+                                                            handleRoleAssignment(user.id, e.target.value as Role)
+                                                        }}
+                                                        disabled={isPending || user.id === currentUser.id}>
                                                         <option value={Role.USER}>
                                                             User
                                                         </option>
-                                                        <option value={Role.GUEST}>
-                                                            Guest
+                                                        <option value={Role.ADMIN}>
+                                                            Admin
                                                         </option>
                                                         <option value={Role.MANAGER}>
                                                             Manager
@@ -122,7 +179,10 @@ const AdminDashboard = ({
                                                     </select>
                                                 </td>
                                                 <td className="py-2">
-                                                    <select onChange={(e) => { handleTeamAssignment(user.id, e.target.value || null) }} disabled={isPending}>
+                                                    <select
+                                                        value={user.teamId || ""}
+                                                        onChange={(e) => { handleTeamAssignment(user.id, e.target.value || null) }}
+                                                        disabled={isPending}>
                                                         <option value="">No Team</option>
                                                         {teams.map((team) => (
                                                             <option key={team.id} value={team.id}>
@@ -143,7 +203,7 @@ const AdminDashboard = ({
                                                     {
                                                         user.teamId && (
                                                             <Button
-                                                                onClick={() => handleTeamAssignment(user.id, null)}
+                                                                onClick={() => handleRemoveMember(user.id, null)}
                                                                 disabled={isPending}
                                                                 variant={"destructive"}
                                                             >
@@ -188,54 +248,56 @@ const AdminDashboard = ({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {
-                                        teams.map((team) => {
-                                            const teamMembers = users.filter(
-                                                (user) => user.teamId === team.id
-                                            )
-                                            // console.log(users.filter((code)=>code.))
-                                            const teamManagers = teamMembers.filter(
-                                                (user) => user.role === Role.MANAGER
-                                            )
-                                            return (
-                                                <tr
-                                                    key={team.id}
-                                                    className="border-b border-slate-700"
-                                                >
-                                                    <td className="py-2 font-medium">
-                                                        {team.name}
-                                                    </td>
-                                                    <td className="py-2 font-medium">
-                                                        <Button variant={"ghost"}>
-                                                            {team.code}
-                                                        </Button>
-                                                    </td>
-                                                    <td className="py-2 font-medium">
-                                                        {teamMembers.length} users
-                                                    </td>
-                                                    <td className="py-2">
-                                                        <div className="flex flex-wrap gap-1">
-                                                            {
-                                                                teamManagers.length > 0 ? (
-                                                                    teamManagers.map((manager) => (
-                                                                        <Button variant={"ghost"} key={manager.id}>
-                                                                            {manager.name}
-                                                                        </Button>
-                                                                    ))
-                                                                ) : (
-                                                                    <div>No Manager</div>
-                                                                )
-                                                            }
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            )
-                                        })
+                                    {teams.map((team) => {
+
+                                        const teamMembers = users.filter(
+                                            user => user.teamId === team.id
+                                        );
+
+                                        const teamManagers = teamMembers.filter(
+                                            user => user.role === Role.MANAGER
+                                        );
+
+                                        return (
+                                            <tr
+                                                key={team.id}
+                                                className="border-b border-slate-700"
+                                            >
+                                                <td className="py-2 font-medium">
+                                                    {team.name}
+                                                </td>
+                                                <td className="py-2 font-medium">
+                                                    <Button>
+                                                        {team?.code}
+                                                    </Button>
+                                                </td>
+                                                <td className="py-2 font-medium">
+                                                    {teamMembers.length} users
+                                                </td>
+                                                <td className="py-2">
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {
+                                                            teamManagers.length > 0 ? (
+                                                                teamManagers.map((manager) => (
+                                                                    <Button variant={"outline"} key={manager.id}>
+                                                                        {manager.name}
+                                                                    </Button>
+                                                                ))
+                                                            ) : (
+                                                                <div>No Manager</div>
+                                                            )
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })
                                     }
                                 </tbody>
                             </table>
                         </div>
                     </div>
+
                 </div>
             </div>
         </>

@@ -2,7 +2,9 @@
 import { checkUserPermission, getCurrentUser } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { Role } from "@/app/types";
+import UserDashboard from "@/components/dashboard/UserDashboard";
 import { redirect } from "next/navigation";
+import { User } from "@/app/types";
 
 
 const UserPage = async () => {
@@ -12,24 +14,25 @@ const UserPage = async () => {
         redirect("/auth/login")
     }
 
-    //Fetch Manager's own team members
+    //Fetch User's own team members
 
-    const TeamMembers = user.teamId ?
-        prisma.user.findMany({
+    const TeamMembers: User[] = user.teamId ?
+        await prisma.user.findMany({
             where: {
                 teamId: user.teamId,
+                role: { not: Role.ADMIN }
             },
-            select:{
-                id:true,
-                name:true,
-                email:true,
-                role:true
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true,
             }
-        }) : []
+        }) as User[] : []
 
     return (
         <UserDashboard
-            TeamMembers={TeamMembers}
+            teamMembers={TeamMembers}
             currentUser={user} />
     )
 }

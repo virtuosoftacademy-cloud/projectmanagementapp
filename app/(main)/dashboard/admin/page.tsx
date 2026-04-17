@@ -1,5 +1,4 @@
 
-import { apiClient } from "@/app/lib/apiclient";
 import { checkUserPermission, getCurrentUser } from "@/app/lib/auth";
 import { prisma } from "@/app/lib/prisma";
 import { transformTeams, transformUsers } from "@/app/lib/utils";

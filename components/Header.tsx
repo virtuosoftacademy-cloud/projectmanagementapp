@@ -4,14 +4,16 @@ import { User } from "@/app/types"
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "./ui/button";
+import { apiClient } from "@/app/lib/apiclient";
+import { useAuth } from "@/app/Provider/AuthProvider";
 
 interface HeaderProps {
     user: User | null
 }
 
 const Header = ({ user }: HeaderProps) => {
-    
     const pathname = usePathname();
+    const { logout } = useAuth()
     const navigation = [
         { name: "Home", href: "/", show: true },
         { name: "Dashboard", href: "/dashboard", show: true },
@@ -20,7 +22,7 @@ const Header = ({ user }: HeaderProps) => {
     const getNavItemClass = (href: string) => {
         return pathname === href ? "text-blue-500" : "text-gray-700";
     }
-    
+
     return (
         <div>
             <header className="border-b border-slate-700 px-20 py-6">
@@ -38,12 +40,15 @@ const Header = ({ user }: HeaderProps) => {
                             </li>
                         ))}
                     </ul>
-                    <div className="space-x-1">
+                    <div className="flex items-center space-x-4">
                         {user ? (
                             <>
-                                <span>{"userName"}</span>
+                                <div className="flex flex-col">
+                                    <div>{user.name}</div>
+                                    <div className="text-xs">{user.role}</div>
+                                </div>
                                 <Button
-                                    // onClick={() => Logout()}
+                                    onClick={logout}
                                 >
                                     Logout
                                 </Button>
