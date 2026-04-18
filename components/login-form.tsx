@@ -50,11 +50,8 @@ export function LoginForm({
     if (!state?.success) return;
     toast.success("Login Successfull!")
 
-    const timer = setTimeout(() => {
-      router.push("/dashboard");
-    }, 400)
+    router.push("/");
 
-    return () => clearTimeout(timer)
   }, [state?.success, router])
 
   return (

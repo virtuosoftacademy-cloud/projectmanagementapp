@@ -12,6 +12,7 @@ interface AdminDashboardProps {
     teams: Team[],
     currentUser: User,
 }
+
 const AdminDashboard = ({
     users,
     teams,
@@ -200,14 +201,14 @@ const AdminDashboard = ({
                                                         )
                                                     }
                                                 </td>
-                                                <td className="py-2">    
-                                                            <Button
-                                                                onClick={() => handleRemoveMember(user.id)}
-                                                                disabled={isPending}
-                                                                variant={"destructive"}
-                                                            >
-                                                                Remove
-                                                            </Button>
+                                                <td className="py-2">
+                                                    <Button
+                                                        onClick={() => handleRemoveMember(user.id)}
+                                                        disabled={isPending}
+                                                        variant={"destructive"}
+                                                    >
+                                                        Remove
+                                                    </Button>
                                                 </td>
                                             </tr>
                                         ))
@@ -263,10 +264,11 @@ const AdminDashboard = ({
                                                 <td className="py-2 font-medium">
                                                     {team.name}
                                                 </td>
-                                                <td className="py-2 font-medium">
-                                                    <Button>
-                                                        {team?.code}
-                                                    </Button>
+                                                <td className="py-2">
+                                                        <span key={teamMembers[0].id} className="bg-green-700 text-white p-1 rounded">
+                                                            {teamMembers[0].team?.code}
+                                                        </span>
+                                                        {/* {team?.code} */}
                                                 </td>
                                                 <td className="py-2 font-medium">
                                                     {teamMembers.length} users

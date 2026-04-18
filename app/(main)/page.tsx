@@ -1,10 +1,14 @@
 
 'use client'
+
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { useAuth } from "@/app/Provider/AuthProvider";
 
-export default function Home() {
-  const user = false;
+
+
+const Home = () => {
+  const { logout } = useAuth()
   return (
     <>
       <div className="max-w-4xl m-auto">
@@ -21,7 +25,7 @@ export default function Home() {
               <li>Inviting members to teams</li>
               <li>Role-based access control</li>
             </ul>
-          </div>  
+          </div>
           <div className="p-4 border rounded">
             <h2 className="text-xl font-semibold mb-2">User Roles</h2>
             <ul className="list-disc list-inside">
@@ -32,40 +36,46 @@ export default function Home() {
             </ul>
           </div>
         </div>
-        {user ? (
-          <div className="p-4 border rounded mt-4 space-y-2">
-            <h2>You Are Logged In</h2>
-            <h2 className="flex gap-4">
-              <span><strong>UserName</strong></span>
-              <span><strong>Role</strong></span>
-            </h2>
-            <div className="flex gap-2 mt-2">
-              <Link href={"/dashboard"}>
-                <Button>
-                  Dashboard
+        {/* <div className="p-4 border rounded mt-4">
+          {user ? (
+
+
+            <>
+              <h2>You Are Not Logged In</h2>
+              <p>Please log in to access the team management features.</p>
+              <div className="flex gap-2 mt-2">
+                <Link href={"/auth/login"}>
+                  <Button>
+                    Log In
+                  </Button>
+                </Link>
+                <Link href={"/auth/register"}>
+                  <Button>
+                    Register
+                  </Button>
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2>You Are Logged In</h2>
+              <div className="flex gap-2 mt-2">
+                <Button onClick={logout}>
+                  Logout
                 </Button>
-              </Link>
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 border rounded mt-4">
-            <h2>You Are Not Logged In</h2>
-            <p>Please log in to access the team management features.</p>
-            <div className="flex gap-2 mt-2">
-              <Link href={"/auth/login"}>
-                <Button>
-                  Log In
-                </Button>
-              </Link>
-              <Link href={"/auth/register"}>
-                <Button>
-                  Register
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
+
+                <Link href={"/dashboard"}>
+                  <Button>
+                    Dashboard
+                  </Button>
+                </Link>
+              </div>
+            </>
+          )}
+        </div> */}
       </div>
     </>
+
   )
 }
+export default Home;

@@ -4,7 +4,6 @@ import { User } from "@/app/types"
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "./ui/button";
-import { apiClient } from "@/app/lib/apiclient";
 import { useAuth } from "@/app/Provider/AuthProvider";
 
 interface HeaderProps {
@@ -12,15 +11,17 @@ interface HeaderProps {
 }
 
 const Header = ({ user }: HeaderProps) => {
+
     const pathname = usePathname();
     const { logout } = useAuth()
+
     const navigation = [
         { name: "Home", href: "/", show: true },
         { name: "Dashboard", href: "/dashboard", show: true },
     ].filter(item => item.show);
 
     const getNavItemClass = (href: string) => {
-        return pathname === href ? "text-blue-500" : "text-gray-700";
+        return pathname === href ? "text-green-800" : "text-gray-700";
     }
 
     return (
@@ -40,13 +41,11 @@ const Header = ({ user }: HeaderProps) => {
                             </li>
                         ))}
                     </ul>
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
                         {user ? (
                             <>
-                                <div className="flex flex-col">
-                                    <div>{user.name}</div>
-                                    <div className="text-xs">{user.role}</div>
-                                </div>
+                                <div className="text-sm">{user.name}</div>
+                                <div className="text-xs">({user.role})</div>
                                 <Button
                                     onClick={logout}
                                 >

@@ -12,20 +12,22 @@ export async function DELETE(req: NextRequest,
     try {
         const { userId } = await context.params;
         const currentuser = await getCurrentUser();
+        
         if (!currentuser || !checkUserPermission(currentuser, Role.ADMIN)) {
             return NextResponse.json({ error: "You are not authorized" }, { status: 401 });
         }
 
         if (userId === currentuser.id) {
-            return NextResponse.json({ error: "You cannot delete user" }, { status: 403 });
+            return NextResponse.json({ error: "User Cannot be deleted" }, { status: 403 });
         }
+
 
         const deleteUser = await prisma.user.delete({
             where: { id: userId }
         });
 
         return NextResponse.json({ user: deleteUser, message: `User Deleted Successfully!` });
-    
+
     } catch (error) {
         console.error("Deletion Error:", error);
         if (error instanceof Error && error.message.includes("Record to delete not found.")) {
