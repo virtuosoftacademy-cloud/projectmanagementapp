@@ -75,7 +75,7 @@ const AdminDashboard = ({
 
     return (
         <>
-            <div className="pt-10 px-20 space-y-6">
+            <div className="px-6 space-y-4">
                 <div>
                     <h2 className="text-2xl font-bold">Admin Dashboard</h2>
                     <p >User & Team Management</p>

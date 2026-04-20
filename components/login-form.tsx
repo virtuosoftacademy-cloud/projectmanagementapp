@@ -50,7 +50,7 @@ export function LoginForm({
     if (!state?.success) return;
     toast.success("Login Successfull!")
 
-    router.push("/");
+    router.push("/dashboard");
 
   }, [state?.success, router])
 

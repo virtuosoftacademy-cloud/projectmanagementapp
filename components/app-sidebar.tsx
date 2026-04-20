@@ -15,28 +15,16 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon } from "lucide-react"
+import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon, CheckSquare, Megaphone, PanelTop, Sheet, Clock, BarChart3, CalendarDays, Settings } from "lucide-react"
+import { Role, User } from "@/app/types"
 
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
       title: "Dashboard",
-      url: "#",
+      url: "/dashboard",
       icon: (
         <LayoutDashboardIcon
-        />
-      ),
-    },
-    {
-      title: "Lifecycle",
-      url: "#",
-      icon: (
-        <ListIcon
         />
       ),
     },
@@ -58,7 +46,8 @@ const data = {
     },
     {
       title: "Team",
-      url: "#",
+      url: "/dashboard/team",
+      // isActive:Role.MANAGER,
       icon: (
         <UsersIcon
         />
@@ -122,41 +111,96 @@ const data = {
       ],
     },
   ],
-  navSecondary: [
+  // navSecondary: [
+  //   {
+  //     title: "Settings",
+  //     url: "#",
+  //     icon: (
+  //       <Settings2Icon
+  //       />
+  //     ),
+  //   },
+  //   {
+  //     title: "Get Help",
+  //     url: "#",
+  //     icon: (
+  //       <CircleHelpIcon
+  //       />
+  //     ),
+  //   },
+  //   {
+  //     title: "Search",
+  //     url: "#",
+  //     icon: (
+  //       <SearchIcon
+  //       />
+  //     ),
+  //   },
+  // ],
+  projects: [
     {
-      title: "Settings",
+      name: "Tasks",
       url: "#",
       icon: (
-        <Settings2Icon
+        <CheckSquare
+        />
+      ),
+    },
+
+    {
+      name: "Campaigns",
+      url: "#",
+      icon: (
+        <Megaphone
         />
       ),
     },
     {
-      title: "Get Help",
+      name: "Landing Pages",
       url: "#",
       icon: (
-        <CircleHelpIcon
+        <PanelTop
         />
       ),
     },
+
     {
-      title: "Search",
+      name: "Timesheet",
       url: "#",
       icon: (
-        <SearchIcon
+        <Sheet
         />
       ),
     },
-  ],
-  documents: [
+
     {
-      name: "Data Library",
+      name: "Time Tracking",
       url: "#",
       icon: (
-        <DatabaseIcon
+        <Clock
         />
       ),
     },
+
+    {
+      name: "Analytics",
+      url: "#",
+      icon: (
+        <BarChart3
+        />
+      ),
+    },
+
+    {
+      name: "Calendar",
+      url: "#",
+      icon: (
+        <CalendarDays
+        />
+      ),
+    },
+
+    
     {
       name: "Reports",
       url: "#",
@@ -166,17 +210,20 @@ const data = {
       ),
     },
     {
-      name: "Word Assistant",
+      name: "Settings",
       url: "#",
       icon: (
-        <FileIcon
+        <Settings
         />
       ),
     },
   ],
 }
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  user: User
+}
+export function AppSidebar({ user, ...props }: AppSidebarProps) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -186,7 +233,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               asChild
               className="data-[slot=sidebar-menu-button]:p-1.5!"
             >
-              <a href="#">
+              <a href="/dashboard">
                 <CommandIcon className="size-5!" />
                 <span className="text-base font-semibold">Acme Inc.</span>
               </a>
@@ -196,11 +243,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavDocuments items={data.documents} />
-        <NavSecondary items={data.navSecondary} className="mt-auto" />
+        <NavDocuments items={data.projects} />
+        {/* <NavSecondary items={data.navSecondary} className="mt-auto" /> */}
       </SidebarContent>
       <SidebarFooter>
-        <NavUser user={data.user} />
+        <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
   )

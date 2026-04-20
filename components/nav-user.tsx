@@ -1,5 +1,6 @@
 "use client"
 
+import { useAuth } from "@/app/Provider/AuthProvider"
 import {
   Avatar,
   AvatarFallback,
@@ -32,7 +33,7 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-
+  const { logout } = useAuth()
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -95,9 +96,14 @@ export function NavUser({
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
-              <LogOutIcon
-              />
-              Log out
+              <div
+                onClick={logout}
+                className="flex gap-2 items-center"
+              >
+                <LogOutIcon
+                />
+                Log out
+              </div>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

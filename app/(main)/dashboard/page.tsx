@@ -1,26 +1,18 @@
+'use client'
 
-import { getCurrentUser } from "@/app/lib/auth";
-import { Role } from "@/app/types";
-import { redirect } from "next/navigation";
+import { ChartAreaInteractive } from "@/components/chart-area-interactive";
+import { SectionCards } from "@/components/section-cards";
 
-const DashboardLayout = async() => {
-  const user = await getCurrentUser();
-  if (!user) {
-    redirect("/auth/login")
-  }
-
-  // Redirect based on user role
-  switch (user.role) {
-    case Role.ADMIN:
-      redirect("/dashboard/admin")
-    case Role.MANAGER:
-      redirect("/dashboard/manager")
-    case Role.USER:
-      redirect("/dashboard/user")
-    default:
-      redirect("/dashboard/user")
-  }
-
+function Dashboard() {
+  return (
+    <>
+      <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+        <SectionCards />
+        <div className="px-4 lg:px-6">
+          <ChartAreaInteractive />
+        </div>
+      </div>
+    </>
+  );
 }
-
-export default DashboardLayout
+export default Dashboard;

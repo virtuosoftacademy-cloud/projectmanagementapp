@@ -4,6 +4,7 @@ import "./globals.css";
 import { cn } from "@/lib/utils";
 import AuthProvider from "./Provider/AuthProvider";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const dmSansHeading = DM_Sans({ subsets: ['latin'], variable: '--font-heading' });
 
@@ -37,7 +38,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-accent">
         <AuthProvider>
           <Toaster />
-          {children}
+          <TooltipProvider>
+            {children}
+          </TooltipProvider>
         </AuthProvider>
       </body>
     </html>
