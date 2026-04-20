@@ -20,9 +20,15 @@ model User {
     name     String
     email    String  @unique
     password String
+    avatar   String?
     role     Role    @default(USER)
     teamId   String?
     team     Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
+    tasks    Task[]
+  projects Project[]
+
+    monthlyHours Int?
+    hourlyRate   Int?
 
     //TimeStamps
     createdAt DateTime @default(now())
@@ -49,4 +55,32 @@ model Team {
 
     //Map
     @@map("teams")
+}
+model Project {
+    id          String   @id @default(cuid())
+    name        String
+    description String?
+    userId      String
+    user        User     @relation(fields: [userId], references: [id])
+
+    status      String   @default("ACTIVE")
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    @@map("projects")
+}
+
+model Task {
+    id          String   @id @default(cuid())
+    title       String
+    description String?
+    status      String   @default("OPEN")
+    userId      String
+    user        User     @relation(fields: [userId], references: [id])
+
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    @@map("tasks")
 }

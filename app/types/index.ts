@@ -15,6 +15,8 @@ export interface User {
     role: Role;
     teamId?: string;
     team?: Team;
+    monthlyHours?: number | null;
+    hourlyRate?: number | null;
     createdAt: Date;
     updatedAt: Date;
 }
