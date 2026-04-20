@@ -53,6 +53,15 @@ const data = {
         />
       ),
     },
+    {
+      title: "Profile",
+      url: "/dashboard/profile",
+      // isActive:Role.MANAGER,
+      icon: (
+        <UsersIcon
+        />
+      ),
+    },
   ],
   navClouds: [
     {
