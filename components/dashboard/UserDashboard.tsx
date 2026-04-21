@@ -10,12 +10,12 @@ const UserDashboard = ({ currentUser, teamMembers }: UserDashboardProps) => {
 
     return (
         <>
-            <div className="pt-10 px-20 space-y-6">
+            <div className="px-6 space-y-2">
                 <div>
                     <h2 className="text-2xl font-bold">User Dashboard</h2>
                     <p >Welcome, {currentUser.name}</p>
                 </div>
-                <div className="grid md:grid-cols-2 gap-6">
+                <div >
 
                     {/*All Team Members*/}
                     <div className="border-2 border-slate-700 rounded-lg">

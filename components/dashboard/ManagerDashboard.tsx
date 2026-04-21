@@ -16,13 +16,13 @@ const ManagerDashboard = ({
 
     return (
         <>
-            <div className="pt-10 px-20 space-y-6">
+            <div className="px-6 space-y-2">
                 <div>
                     <h2 className="text-2xl font-bold">Manager Dashboard</h2>
                     <p >User & Team Management</p>
                 </div>
                 {/* Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 ">
                     <div className="border border-slate-700 rounded-lg p-6 text-center">
                         <div className="text-2xl font-bold text-gray-700">
                             {TeamMembers.filter(user => user.role === Role.MANAGER).length}

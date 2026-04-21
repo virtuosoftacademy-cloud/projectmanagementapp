@@ -15,7 +15,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon, CheckSquare, Megaphone, PanelTop, Sheet, Clock, BarChart3, CalendarDays, Settings } from "lucide-react"
+import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon, CheckSquare, Megaphone, PanelTop, Sheet, Clock, BarChart3, CalendarDays, Settings, UserIcon } from "lucide-react"
 import { Role, User } from "@/app/types"
 
 const data = {
@@ -30,7 +30,7 @@ const data = {
     },
     {
       title: "Analytics",
-      url: "#",
+      url: "/dashboard/analytics",
       icon: (
         <ChartBarIcon
         />
@@ -58,7 +58,7 @@ const data = {
       url: "/dashboard/profile",
       // isActive:Role.MANAGER,
       icon: (
-        <UsersIcon
+        <UserIcon
         />
       ),
     },

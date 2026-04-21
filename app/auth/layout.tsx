@@ -8,9 +8,9 @@ const AuthLayout = ({ children }: { children: React.ReactNode }) => {
     return (
         <div className="min-h-screen flex items-center justify-center flex-col bg-gray-100 px-20">
             <div className="pt-8 self-start">
-            <Button onClick={() => router.push("/")} >
+            {/* <Button onClick={() => router.push("/")} >
                 <ArrowLeft />
-            </Button>
+            </Button> */}
             </div>
             {children}
         </div>
