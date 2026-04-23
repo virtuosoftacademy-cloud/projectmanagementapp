@@ -14,7 +14,7 @@ export default async function ProfilePage() {
   const [projectCount, taskCount, completedTaskCount, projects, tasks] = await Promise.all([
     prisma.project.count({ where: { userId: user.id } }),
     prisma.task.count({ where: { userId: user.id } }),
-    prisma.task.count({ where: { userId: user.id, status: "COMPLETED" } }),
+    prisma.task.count({ where: { userId: user.id, status: "DONE" } }),
     prisma.project.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
@@ -23,18 +23,11 @@ export default async function ProfilePage() {
       where: { userId: user.id },
       include: {
         user: true,
+        project: true // Now that relation exists
       },
       orderBy: { createdAt: "desc" },
     }),
   ]);
-
-  // Transform tasks to include project info if available
-  // Note: Schema currently doesn't have a direct link from Task to Project in prisma/schema.prisma
-  // I'll check if I can add that or just show them as a list.
-  // Actually, looking at schema.prisma, Task only has userId, title, description, status.
-  // Project only has name, description, userId, status.
-  // There is NO relation between Project and Task in the current schema.
-  // I will just display them as separate lists as per the schema.
 
   const stats = {
     projects: projectCount,

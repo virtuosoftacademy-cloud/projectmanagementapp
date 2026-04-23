@@ -35,7 +35,9 @@ export const getCurrentUser = async (): Promise<User | null> => {
                 id: decode.userId,
             }
         });
-        const { password, ...user } = userfromDB!
+
+        if (!userfromDB) return null;
+        const { password, ...user } = userfromDB;
         return user as User;
     } catch (error) {
         console.error(`Error in Getting CurrentUser:${error}`);

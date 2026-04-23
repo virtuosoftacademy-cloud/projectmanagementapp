@@ -55,12 +55,13 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
     const loadUser = async () => {
       try {
         const data = await apiClient.GetCurrentUser();
-        setUser(data.user || null);
+        // The API returns the user object directly, not wrapped in { user: ... }
+        setUser(data || null);
       } catch (e) {
         console.error("Failed to load user profile:", e);
       }
-      loadUser();
-    }
+    };
+    loadUser();
   }, []);
 
   return (

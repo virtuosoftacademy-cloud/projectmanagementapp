@@ -6,6 +6,7 @@ import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
 import { NavSecondary } from "@/components/nav-secondary"
 import { NavUser } from "@/components/nav-user"
+import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher"
 import {
   Sidebar,
   SidebarContent,
@@ -15,7 +16,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon, CheckSquare, Megaphone, PanelTop, Sheet, Clock, BarChart3, CalendarDays, Settings } from "lucide-react"
+import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon, CheckSquare, Megaphone, PanelTop, Sheet, Clock, BarChart3, CalendarDays, Settings, Circle } from "lucide-react"
 import { Role, User } from "@/app/types"
 
 const data = {
@@ -38,7 +39,7 @@ const data = {
     },
     {
       title: "Projects",
-      url: "#",
+      url: "/dashboard/projects",
       icon: (
         <FolderIcon
         />
@@ -209,7 +210,7 @@ const data = {
       ),
     },
 
-    
+
     {
       name: "Reports",
       url: "#",
@@ -231,28 +232,37 @@ const data = {
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   user: User
+  projects: any[]
+  workspaces: any[]
+  activeWorkspace: any
 }
-export function AppSidebar({ user, ...props }: AppSidebarProps) {
+export function AppSidebar({ user, projects, workspaces, activeWorkspace, ...props }: AppSidebarProps) {
+  const projectItems = projects.map((p) => ({
+    name: p.name,
+    url: `/dashboard/projects/${p.id}`,
+    icon: (
+      <Circle
+        className={`size-2.5 fill-current ${p.status === "ACTIVE"
+            ? "text-blue-500"
+            : p.status === "COMPLETED"
+              ? "text-emerald-500"
+              : "text-amber-500"
+          }`}
+      />
+    ),
+  }))
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:p-1.5!"
-            >
-              <a href="/dashboard">
-                <CommandIcon className="size-5!" />
-                <span className="text-base font-semibold">Acme Inc.</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <WorkspaceSwitcher 
+          workspaces={workspaces} 
+          activeWorkspace={activeWorkspace} 
+        />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavDocuments items={data.projects} />
+        <NavDocuments items={projectItems} />
         {/* <NavSecondary items={data.navSecondary} className="mt-auto" /> */}
       </SidebarContent>
       <SidebarFooter>
