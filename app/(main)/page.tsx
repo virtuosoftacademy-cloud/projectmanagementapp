@@ -10,13 +10,10 @@ const MainPage = async() => {
   const isAuthenticated = await getCurrentUser(); // Replace with your actual authentication logic
 
   if (!isAuthenticated) {
-    redirect ("/dashboard");    
+    redirect ("/auth/login");    
   }
-  return (
-    <>
-      <Login />
-    </>
-
-  )
+  else {
+    redirect("/dashboard");
+  }
 }
 export default MainPage;
