@@ -61,7 +61,6 @@ export function CreateWorkspaceDialog({ open, onOpenChange }: CreateWorkspaceDia
           <Button
             onClick={handleCreate}
             disabled={isLoading || !name.trim()}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
           >
             {isLoading ? "Creating..." : "Create"}
           </Button>

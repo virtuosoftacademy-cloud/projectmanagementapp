@@ -37,7 +37,7 @@ export function KanbanTaskCard({ task }: KanbanTaskCardProps) {
     switch (priority?.toUpperCase()) {
       case "HIGH": return "bg-orange-50 text-orange-600 border-orange-100";
       case "LOW": return "bg-gray-50 text-gray-600 border-gray-100";
-      default: return "bg-blue-50 text-blue-600 border-blue-100";
+      default: return "bg-green-50 text-green-600 border-green-100";
     }
   };
 
@@ -57,7 +57,7 @@ export function KanbanTaskCard({ task }: KanbanTaskCardProps) {
       <Card className="p-5 bg-white border border-gray-100 shadow-sm hover:shadow-md transition-all rounded-2xl group">
         <div className="space-y-4">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="h-1.5 w-8 rounded-full bg-blue-600" />
+            <span className="h-1.5 w-8 rounded-full bg-primary" />
             {task.tags?.map((tag: string) => (
               <Badge key={tag} className={`${getTagColor(tag)} border text-[10px] h-5 px-2 font-bold rounded-md shadow-none`}>
                 {tag}
@@ -99,7 +99,7 @@ export function KanbanTaskCard({ task }: KanbanTaskCardProps) {
           <div className="flex justify-end pt-1">
             <Avatar className="h-7 w-7 border-2 border-white ring-1 ring-gray-50 shadow-sm">
               <AvatarImage src={task.user?.avatar || ""} />
-              <AvatarFallback className="bg-gradient-to-br from-indigo-50 to-blue-50 text-[10px] font-black text-blue-700">
+              <AvatarFallback className="bg-gradient-to-br from-green-50 to-emerald-50 text-[10px] font-black text-green-700">
                 {task.user?.name.split(' ').map((n: string) => n[0]).join('')}
               </AvatarFallback>
             </Avatar>

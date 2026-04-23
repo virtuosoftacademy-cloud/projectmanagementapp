@@ -118,7 +118,7 @@ export function CreateTaskDialog({ projectId, userId, defaultStatus }: CreateTas
           <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white font-bold">
+          <Button onClick={handleSubmit} disabled={loading} className="font-bold">
             {loading ? "Creating..." : "Create Task"}
           </Button>
         </DialogFooter>

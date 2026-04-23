@@ -12,8 +12,9 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, teamMembers }: ProjectCardProps) {
-  const fallbackColor = project.status === "ACTIVE" ? "#3b82f6" : project.status === "COMPLETED" ? "#22c55e" : "#eab308";
-  const projectColor = project.color || fallbackColor;
+  const fallbackColor = project.status === "ACTIVE" ? "var(--primary)" : project.status === "COMPLETED" ? "#16a34a" : "#eab308";
+  let projectColor = project.color || fallbackColor;
+  if (projectColor === "#3b82f6") projectColor = "var(--primary)";
   
   const totalTasks = project.tasks?.length || 0;
   const completedTasks = project.tasks?.filter((t: any) => t.status === "DONE").length || 0;
@@ -22,7 +23,7 @@ export function ProjectCard({ project, teamMembers }: ProjectCardProps) {
     <Link href={`/dashboard/projects/${project.id}`} className="group block">
       <Card className="p-6 border border-gray-100 shadow-none hover:shadow-lg transition-all duration-300 rounded-xl bg-white relative">
         <div className="absolute top-6 right-6">
-          <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-none px-3 py-0.5 rounded-full text-[11px] font-bold lowercase">
+          <Badge variant="secondary" className="bg-primary/10 text-primary border-none px-3 py-0.5 rounded-full text-[11px] font-bold lowercase">
             {project.status.toLowerCase()}
           </Badge>
         </div>

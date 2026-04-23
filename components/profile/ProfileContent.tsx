@@ -52,16 +52,16 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
       <Card className="overflow-hidden border-none shadow-sm bg-white">
         <CardContent className="p-8">
           <div className="flex flex-col md:flex-row items-center gap-6">
-            <Avatar className="h-24 w-24 border-4 border-blue-50">
+            <Avatar className="h-24 w-24 border-4 border-green-50">
               <AvatarImage src={user.avatar} />
-              <AvatarFallback className="text-2xl bg-blue-100 text-blue-700 font-bold">
+              <AvatarFallback className="text-2xl bg-green-100 text-green-700 font-bold">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="text-center md:text-left space-y-2">
               <div className="flex flex-col md:flex-row md:items-center gap-2">
                 <h2 className="text-2xl font-bold text-gray-900">{user.name}</h2>
-                <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-200 border-none w-fit mx-auto md:mx-0">
+                <Badge variant="secondary" className="bg-green-100 text-green-700 hover:bg-green-200 border-none w-fit mx-auto md:mx-0">
                   {user.role.toLowerCase()}
                 </Badge>
               </div>
@@ -78,8 +78,8 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <FolderIcon className="h-6 w-6 text-blue-600" />
+            <div className="p-3 bg-green-50 rounded-lg">
+              <FolderIcon className="h-6 w-6 text-green-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{stats.projects}</p>
@@ -90,8 +90,8 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
 
         <Card className="border-none shadow-sm bg-white hover:shadow-md transition-shadow">
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-indigo-50 rounded-lg">
-              <ListChecks className="h-6 w-6 text-indigo-600" />
+            <div className="p-3 bg-teal-50 rounded-lg">
+              <ListChecks className="h-6 w-6 text-teal-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{stats.tasks}</p>
@@ -169,7 +169,7 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
                   <Button 
                     type="submit" 
                     disabled={isPending}
-                    className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px] gap-2"
+                    className="min-w-[140px] gap-2"
                   >
                     {isPending ? (
                       <span className="flex items-center gap-2">
@@ -198,7 +198,7 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
                   {projects.map((project) => (
                     <div key={project.id} className="p-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
                       <div className="flex items-center gap-4">
-                        <div className={`h-3 w-3 rounded-full ${project.status === 'ACTIVE' ? 'bg-blue-500' : 'bg-green-500'}`} />
+                        <div className={`h-3 w-3 rounded-full ${project.status === 'ACTIVE' ? 'bg-primary' : 'bg-emerald-600'}`} />
                         <div>
                           <h4 className="font-bold text-gray-900">{project.name}</h4>
                           <p className="text-sm text-gray-500 line-clamp-1">{project.description || "No description provided."}</p>
@@ -235,7 +235,7 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
                            <span>Created {new Date(task.createdAt).toLocaleDateString()}</span>
                         </div>
                       </div>
-                      <Badge variant="outline" className={`text-[10px] font-bold uppercase ${task.status === 'COMPLETED' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                      <Badge variant="outline" className={`text-[10px] font-bold uppercase ${task.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
                         {task.status.replace("_", " ")}
                       </Badge>
                     </div>

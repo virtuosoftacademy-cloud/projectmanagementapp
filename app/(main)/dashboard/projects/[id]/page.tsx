@@ -48,7 +48,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
           <div className="flex items-center gap-3">
              <div 
                className="h-2.5 w-2.5 rounded-full" 
-               style={{ backgroundColor: project.color || "#3b82f6" }} 
+               style={{ backgroundColor: project.color === "#3b82f6" ? "var(--primary)" : project.color || "var(--primary)" }} 
              />
              <h1 className="text-2xl font-black text-gray-900 tracking-tight">{project.name}</h1>
           </div>

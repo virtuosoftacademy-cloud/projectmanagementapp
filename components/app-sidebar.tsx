@@ -243,7 +243,7 @@ export function AppSidebar({ user, projects, workspaces, activeWorkspace, ...pro
     icon: (
       <Circle
         className={`size-2.5 fill-current ${p.status === "ACTIVE"
-            ? "text-blue-500"
+            ? "text-primary"
             : p.status === "COMPLETED"
               ? "text-emerald-500"
               : "text-amber-500"

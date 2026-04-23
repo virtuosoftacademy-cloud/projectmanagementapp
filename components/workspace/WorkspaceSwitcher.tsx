@@ -55,7 +55,7 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace }: WorkspaceSwit
             <DropdownMenuItem
               key={workspace.id}
               onClick={() => setActiveWorkspace(workspace.id)}
-              className="gap-2 p-2 focus:bg-blue-50 focus:text-blue-700 transition-colors"
+              className="gap-2 p-2 focus:bg-green-50 focus:text-green-700 transition-colors"
             >
               <div className="flex size-6 items-center justify-center rounded-sm border bg-muted/50">
                 <Command className="size-3 shrink-0" />
@@ -65,10 +65,10 @@ export function WorkspaceSwitcher({ workspaces, activeWorkspace }: WorkspaceSwit
           ))}
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            className="gap-2 p-2 cursor-pointer font-medium text-blue-600 hover:text-blue-700 focus:text-blue-700"
+            className="gap-2 p-2 cursor-pointer font-medium text-green-600 hover:text-green-700 focus:text-green-700"
             onClick={() => setShowCreateDialog(true)}
           >
-            <div className="flex size-6 items-center justify-center rounded-md border border-blue-100 bg-blue-50">
+            <div className="flex size-6 items-center justify-center rounded-md border border-green-100 bg-green-50">
               <Plus className="size-4" />
             </div>
             <span>Add Workspace</span>

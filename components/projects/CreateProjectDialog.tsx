@@ -27,7 +27,7 @@ import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
 
 const COLORS = [
-  "#3b82f6", // Blue
+  "var(--primary)", // Primary
   "#22c55e", // Green
   "#eab308", // Yellow
   "#ef4444", // Red
@@ -96,7 +96,7 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="bg-[#3b82f6] hover:bg-blue-600 text-white shadow-none font-bold rounded-lg h-10 px-4 gap-2">
+        <Button className="shadow-none font-bold rounded-lg h-10 px-4 gap-2">
           <Plus className="h-4 w-4" />
           <span className="text-xs">New Project</span>
         </Button>
@@ -221,7 +221,6 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
             Cancel
           </Button>
           <Button 
-            className="bg-blue-600 hover:bg-blue-700 text-white" 
             onClick={handleSubmit}
             disabled={loading}
           >

@@ -38,7 +38,7 @@ export function CreateProjectSheet() {
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-100 transition-all gap-2 h-11 px-6 rounded-xl self-start md:self-auto">
+        <Button className="shadow-md shadow-primary/20 transition-all gap-2 h-11 px-6 rounded-xl self-start md:self-auto">
           <Plus className="h-5 w-5" />
           <span className="font-semibold text-sm">Add Project</span>
         </Button>
@@ -79,7 +79,7 @@ export function CreateProjectSheet() {
         </div>
         
         <SheetFooter className="absolute bottom-0 left-0 right-0 p-6 border-t border-gray-50 bg-white">
-          <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white h-11 rounded-lg font-bold shadow-lg shadow-blue-100">
+          <Button className="w-full h-11 rounded-lg font-bold shadow-lg shadow-primary/20">
             Create Project
           </Button>
         </SheetFooter>
