@@ -63,6 +63,14 @@ const data = {
         />
       ),
     },
+    {
+      title: "Settings",
+      url: "/dashboard/settings",
+      icon: (
+        <Settings
+        />
+      ),
+    },
   ],
   navClouds: [
     {
@@ -216,14 +224,6 @@ const data = {
       url: "#",
       icon: (
         <FileChartColumnIcon
-        />
-      ),
-    },
-    {
-      name: "Settings",
-      url: "#",
-      icon: (
-        <Settings
         />
       ),
     },

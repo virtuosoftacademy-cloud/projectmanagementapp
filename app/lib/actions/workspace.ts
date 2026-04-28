@@ -47,3 +47,46 @@ export async function createWorkspace(name: string) {
     return { error: "Failed to create workspace" }
   }
 }
+
+/**
+ * Updates an existing workspace.
+ * Only owners or users with ADMIN/MANAGER roles can update workspace settings.
+ */
+export async function updateWorkspace(id: string, name: string, description: string | null) {
+  const user = await getCurrentUser()
+  if (!user) {
+    return { error: "Unauthorized" }
+  }
+
+  try {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id },
+    })
+
+    if (!workspace) {
+      return { error: "Workspace not found" }
+    }
+
+    // Check if user is the owner or has appropriate permissions
+    const isOwner = workspace.userId === user.id
+    const hasPermission = user.role === "ADMIN" || user.role === "MANAGER"
+
+    if (!isOwner && !hasPermission) {
+      return { error: "You don't have permission to update this workspace" }
+    }
+
+    const updatedWorkspace = await prisma.workspace.update({
+      where: { id },
+      data: {
+        name,
+        description,
+      },
+    })
+
+    revalidatePath("/dashboard/settings")
+    return { success: true, workspace: updatedWorkspace }
+  } catch (error) {
+    console.error("Failed to update workspace:", error)
+    return { error: "Failed to update workspace" }
+  }
+}

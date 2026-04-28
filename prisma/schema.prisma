@@ -106,6 +106,7 @@ model Task {
 model Workspace {
     id        String    @id @default(cuid())
     name      String
+    description String?
     userId    String
     user      User      @relation(fields: [userId], references: [id])
     teamId    String?
