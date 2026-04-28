@@ -94,11 +94,11 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog>
       <DialogTrigger asChild>
-        <Button className="shadow-none font-bold rounded-lg h-10 px-4 gap-2">
+        <Button>
           <Plus className="h-4 w-4" />
-          <span className="text-xs">New Project</span>
+          <span className="text-sm">New Project</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[550px] overflow-y-auto max-h-[90vh]">
