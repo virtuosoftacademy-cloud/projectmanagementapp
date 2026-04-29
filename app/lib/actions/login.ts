@@ -36,6 +36,16 @@ export async function loginAction(
       return { error: "Invalid email or password" };
     }
 
+    const token = generateToken(userFromDB.id);
+    const cookieStore = await cookies();
+    cookieStore.set("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    return { success: true };
   } catch (error) {
     console.error("Login action error:", error);
     return { error: "Something went wrong. Please try again." };
