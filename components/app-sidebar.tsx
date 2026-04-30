@@ -2,232 +2,72 @@
 
 import * as React from "react"
 
-import { NavDocuments } from "@/components/nav-documents"
 import { NavMain } from "@/components/nav-main"
-import { NavSecondary } from "@/components/nav-secondary"
+import { NavProjects } from "@/components/nav-projects"
 import { NavUser } from "@/components/nav-user"
-import { WorkspaceSwitcher } from "@/components/workspace/WorkspaceSwitcher"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
+  SidebarRail,
 } from "@/components/ui/sidebar"
-import { LayoutDashboardIcon, ListIcon, ChartBarIcon, FolderIcon, UsersIcon, CameraIcon, FileTextIcon, Settings2Icon, CircleHelpIcon, SearchIcon, DatabaseIcon, FileChartColumnIcon, FileIcon, CommandIcon, CheckSquare, Megaphone, PanelTop, Sheet, Clock, BarChart3, CalendarDays, Settings, Circle } from "lucide-react"
-import { Role, User } from "@/app/types"
+import { Settings2Icon, Circle, LayoutDashboardIcon, Users, Users2, Folder, UserIcon } from "lucide-react"
+import { WorkspaceSwitcher } from "./workspace/WorkspaceSwitcher"
 
+// This is sample data.
 const data = {
   navMain: [
     {
       title: "Dashboard",
-      url: "/dashboard",
+      url: "#",
       icon: (
         <LayoutDashboardIcon
         />
-      ),
+      )
     },
     {
-      title: "Analytics",
+      title: "Team Members",
+      url: "/dashboard/team",
+      icon: (
+        <Users
+        />
+      )
+    },
+    {
+      title: "Teams",
       url: "#",
       icon: (
-        <ChartBarIcon
+        <Users2
         />
-      ),
+      )
     },
     {
       title: "Projects",
       url: "/dashboard/projects",
       icon: (
-        <FolderIcon
+        <Folder
         />
-      ),
-    },
-    {
-      title: "Team",
-      url: "/dashboard/team",
-      // isActive:Role.MANAGER,
-      icon: (
-        <UsersIcon
-        />
-      ),
+      )
     },
     {
       title: "Profile",
       url: "/dashboard/profile",
-      // isActive:Role.MANAGER,
       icon: (
-        <UsersIcon
+        <UserIcon
         />
-      ),
+      )
     },
     {
       title: "Settings",
       url: "/dashboard/settings",
       icon: (
-        <Settings
+        <Settings2Icon
         />
-      ),
+      )
     },
   ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: (
-        <CameraIcon
-        />
-      ),
-      isActive: true,
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Proposal",
-      icon: (
-        <FileTextIcon
-        />
-      ),
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: (
-        <FileTextIcon
-        />
-      ),
-      url: "#",
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  // navSecondary: [
-  //   {
-  //     title: "Settings",
-  //     url: "#",
-  //     icon: (
-  //       <Settings2Icon
-  //       />
-  //     ),
-  //   },
-  //   {
-  //     title: "Get Help",
-  //     url: "#",
-  //     icon: (
-  //       <CircleHelpIcon
-  //       />
-  //     ),
-  //   },
-  //   {
-  //     title: "Search",
-  //     url: "#",
-  //     icon: (
-  //       <SearchIcon
-  //       />
-  //     ),
-  //   },
-  // ],
-  projects: [
-    {
-      name: "Tasks",
-      url: "#",
-      icon: (
-        <CheckSquare
-        />
-      ),
-    },
 
-    {
-      name: "Campaigns",
-      url: "#",
-      icon: (
-        <Megaphone
-        />
-      ),
-    },
-    {
-      name: "Landing Pages",
-      url: "#",
-      icon: (
-        <PanelTop
-        />
-      ),
-    },
-
-    {
-      name: "Timesheet",
-      url: "#",
-      icon: (
-        <Sheet
-        />
-      ),
-    },
-
-    {
-      name: "Time Tracking",
-      url: "#",
-      icon: (
-        <Clock
-        />
-      ),
-    },
-
-    {
-      name: "Analytics",
-      url: "#",
-      icon: (
-        <BarChart3
-        />
-      ),
-    },
-
-    {
-      name: "Calendar",
-      url: "#",
-      icon: (
-        <CalendarDays
-        />
-      ),
-    },
-
-
-    {
-      name: "Reports",
-      url: "#",
-      icon: (
-        <FileChartColumnIcon
-        />
-      ),
-    },
-  ],
 }
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -236,38 +76,55 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   workspaces: any[]
   activeWorkspace: any
 }
+
 export function AppSidebar({ user, projects, workspaces, activeWorkspace, ...props }: AppSidebarProps) {
+
   const projectItems = projects.map((p) => ({
     name: p.name,
     url: `/dashboard/projects/${p.id}`,
     icon: (
       <Circle
         className={`size-2.5 fill-current ${p.status === "ACTIVE"
-            ? "text-primary"
-            : p.status === "COMPLETED"
-              ? "text-emerald-500"
-              : "text-amber-500"
+          ? "text-primary"
+          : p.status === "COMPLETED"
+            ? "text-emerald-500"
+            : "text-amber-500"
           }`}
       />
-    ),
+    ), 
+    items: [
+      {
+        title: "Tasks",
+        url: `/dashboard/projects/tasks/${p.id}`,
+      },
+      {
+        title: "Campaigns",
+        url: `/dashboard/projects/campaigns/${p.id}`,
+      },
+      {
+        title: "Landing Pages",
+        url: `/dashboard/projects/landing-pages/${p.id}`,
+      },
+    ]
   }))
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        <WorkspaceSwitcher 
-          workspaces={workspaces} 
-          activeWorkspace={activeWorkspace} 
+        {/* <TeamSwitcher teams={data.teams} /> */}
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          activeWorkspace={activeWorkspace}
         />
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavDocuments items={projectItems} />
-        {/* <NavSecondary items={data.navSecondary} className="mt-auto" /> */}
+        <NavProjects projects={projectItems} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />
       </SidebarFooter>
+      <SidebarRail />
     </Sidebar>
   )
 }
