@@ -2,12 +2,7 @@
 
 import { ProjectCard } from "./ProjectCard"
 import { FolderPlus } from "lucide-react"
-import { Button } from "@/components/ui/button"
-
-interface ProjectListProps {
-  projects: any[]
-  teamMembers: any[]
-}
+import { ProjectListProps } from "@/app/interface";
 
 export function ProjectList({ projects, teamMembers }: ProjectListProps) {
   if (projects.length === 0) {

@@ -59,9 +59,9 @@ export default async function SettingsPage() {
     }
 
     return (
-        <div className="flex-1 p-4 md:p-8 space-y-8">
+        <div className="px-8 space-y-8">
             <div>
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">Settings</h1>
+                <h1 className="text-3xl font-bold tracking-tight text-gray-900">Settings</h1>
                 <p className="text-sm text-gray-500 mt-0.5">
                     Manage your workspace and profile
                 </p>

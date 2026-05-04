@@ -6,7 +6,7 @@ import { KanbanBoard } from "@/components/projects/kanban/KanbanBoard";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-export default async function ProjectDetailPage({ params }: { params: { id: string } }) {
+export default async function TasksPage({ params }: { params: { id: string } }) {
   const user = await getCurrentUser();
   const { id } = await params;
 
@@ -40,7 +40,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col bg-[#fefefe]">
-      <div className="p-4 md:p-8 flex-none">
+      <div className="px-4 flex-none">
         <div className="flex items-center gap-4 mb-2">
           <Link href="/dashboard/projects" className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
             <ArrowLeft className="h-5 w-5 text-gray-400" />

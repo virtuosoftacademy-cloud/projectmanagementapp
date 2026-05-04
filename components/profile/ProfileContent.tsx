@@ -47,7 +47,7 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
     .toUpperCase()
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="space-y-6 mx-auto">
       {/* Profile Header Card */}
       <Card className="overflow-hidden border-none shadow-sm bg-white">
         <CardContent className="p-8">
@@ -153,18 +153,18 @@ export function ProfileContent({ user, stats, projects, tasks }: ProfileContentP
                   <Input name="email" defaultValue={user.email} disabled className="bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed" />
                   <p className="text-[10px] text-gray-400 mt-1">Email cannot be changed</p>
                 </div>
-                <div className="space-y-2">
+                {/* <div className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <DollarSign className="h-4 w-4" /> Hourly Rate (PKR)
                   </label>
                   <Input name="hourlyRate" type="number" defaultValue={user.hourlyRate || 0} className="bg-gray-50 border-gray-200 focus:bg-white" />
-                </div>
-                <div className="space-y-2">
+                </div> */}
+                {/* <div className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <Clock className="h-4 w-4" /> Monthly Hours
                   </label>
                   <Input name="monthlyHours" type="number" defaultValue={user.monthlyHours || 0} className="bg-gray-50 border-gray-200 focus:bg-white" />
-                </div>
+                </div> */}
                 <div className="md:col-span-2 flex justify-end pt-4 border-t border-gray-100 mt-4">
                   <Button 
                     type="submit" 

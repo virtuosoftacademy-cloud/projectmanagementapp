@@ -5,10 +5,11 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import Link from "next/link"
 import { CheckSquare, CalendarDays } from "lucide-react"
+import { Team } from "@/app/types"
 
 interface ProjectCardProps {
   project: any
-  teamMembers: any[]
+  teamMembers: Team[]
 }
 
 export function ProjectCard({ project, teamMembers }: ProjectCardProps) {

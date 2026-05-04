@@ -8,6 +8,7 @@ import { SiteHeader } from "@/components/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { redirect } from "next/navigation"
 import { cookies } from "next/headers"
+import { transformTeams, transformUsers } from "@/app/lib/utils"
 
 export default async function MainPage({ children }: { children: React.ReactNode }) {
     const user = await getCurrentUser();
@@ -42,6 +43,33 @@ export default async function MainPage({ children }: { children: React.ReactNode
         },
         orderBy: { createdAt: "desc" },
     });
+      const [prismaUsers, prismaTeams] = await Promise.all([
+        prisma.user.findMany({
+          include: {
+            team: true,
+    
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        }),
+        prisma.team.findMany({
+          include: {
+            members: {
+              select: {
+                id: true,
+                name: true,
+                role: true,
+                email: true
+              }
+            }
+          }
+        })
+      ])
+    
+      const users = transformUsers(prismaUsers)
+      const teams = transformTeams(prismaTeams)
+    
     return (
         <SidebarProvider
             style={
@@ -53,6 +81,8 @@ export default async function MainPage({ children }: { children: React.ReactNode
         >
             <AppSidebar 
                 variant="inset" 
+                teams={teams}
+                users={users}
                 user={user} 
                 projects={projects} 
                 workspaces={workspaces}

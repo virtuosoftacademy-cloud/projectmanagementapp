@@ -93,17 +93,17 @@ export function SettingsContent({ user, activeWorkspace, members }: SettingsCont
   }
 
   const permissions = [
-    { name: "View projects", roles: ["owner", "admin", "manager", "member", "viewer", "guest"] },
-    { name: "Create projects", roles: ["owner", "admin", "manager", "member"] },
-    { name: "Edit projects", roles: ["owner", "admin", "manager", "member"] },
-    { name: "Delete projects", roles: ["owner", "admin"] },
-    { name: "Manage tasks", roles: ["owner", "admin", "manager", "member"] },
-    { name: "Log time", roles: ["owner", "admin", "manager", "member"] },
-    { name: "View reports", roles: ["owner", "admin", "manager", "member", "viewer"] },
-    { name: "Invite members", roles: ["owner", "admin", "manager"] },
-    { name: "Manage roles", roles: ["owner", "admin"] },
-    { name: "Workspace settings", roles: ["owner", "admin"] },
-    { name: "Billing & plans", roles: ["owner"] },
+    { name: "View projects", roles: ["admin", "manager", "member", "viewer", "guest"] },
+    { name: "Create projects", roles: [ "admin", "manager", "member"] },
+    { name: "Edit projects", roles: ["admin", "manager", "member"] },
+    { name: "Delete projects", roles: ["admin"] },
+    { name: "Manage tasks", roles: ["admin", "manager", "member"] },
+    { name: "Log time", roles: ["admin", "manager", "member"] },
+    { name: "View reports", roles: ["admin", "manager", "member", "viewer"] },
+    { name: "Invite members", roles: ["admin", "manager"] },
+    { name: "Manage roles", roles: ["admin"] },
+    { name: "Workspace settings", roles: ["admin"] },
+    // { name: "Billing & plans", roles: ["owner"] },
   ]
 
   const permissionRoles = ["Owner", "Admin", "Manager", "Member", "Viewer", "Guest"]

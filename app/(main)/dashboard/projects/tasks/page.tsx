@@ -5,7 +5,7 @@ import { CreateProjectDialog } from "@/components/projects/CreateProjectDialog";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
-export default async function ProjectsPage() {
+export default async function TasksPage() {
   const user = await getCurrentUser();
 
   if (!user) {
@@ -26,7 +26,7 @@ export default async function ProjectsPage() {
     orderBy: { createdAt: "asc" }
   });
 
-  const activeWorkspace = activeWorkspaceId 
+  const activeWorkspace = activeWorkspaceId
     ? workspaces.find(w => w.id === activeWorkspaceId) || workspaces[0]
     : workspaces.find(w => w.name === "Acme Inc.") || workspaces[0];
 
@@ -61,31 +61,32 @@ export default async function ProjectsPage() {
         name: true,
         avatar: true
       },
-      take: 5 
+      take: 5
     });
   }
 
   return (
-    <div className="p-4 md:p-8 space-y-8">
+    <div className="px-4 space-y-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-             <span className="text-xs font-bold px-2 py-0.5 rounded bg-primary/10 text-primary uppercase tracking-wider">
-               {activeWorkspace?.name || "No Workspace"}
-             </span>
+            <span className="text-xs font-bold px-2 py-0.5 rounded bg-primary/10 text-primary uppercase tracking-wider">
+              {activeWorkspace?.name || "No Workspace"}
+            </span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Projects</h1>
           <p className="text-sm text-gray-400 mt-0.5">All projects in your workspace</p>
         </div>
-        <CreateProjectDialog 
-          workspaceId={activeWorkspace?.id || ""} 
-          teamMembers={teamMembers} 
+        <CreateProjectDialog
+          users={teamMembers}
+          workspaceId={activeWorkspace?.id || ""}
+          teamMembers={teamMembers}
         />
       </div>
 
-      <ProjectList 
-        projects={projects} 
-        teamMembers={teamMembers} 
+      <ProjectList
+        projects={projects}
+        teamMembers={teamMembers}
       />
     </div>
   );

@@ -16,25 +16,26 @@ enum Role {
 }
 
 model User {
-    id       String  @id @default(cuid())
-    name     String
-    email    String  @unique
-    password String
-    avatar   String?
-    role     Role    @default(USER)
-    teamId   String?
-    team     Team?   @relation(fields: [teamId], references: [id], onDelete: SetNull)
-    tasks    Task[]
-    projects Project[]
-    memberOfProject Project[] @relation("ProjectMembers")
-    workspaces Workspace[]
+    id              String      @id @default(cuid())
+    name            String
+    email           String      @unique
+    password        String
+    avatar          String?
+    role            Role        @default(USER)
+    teamId          String?
+    team            Team?       @relation(fields: [teamId], references: [id], onDelete: SetNull)
+    tasks           Task[]
+    projects        Project[]
+    memberOfProject Project[]   @relation("ProjectMembers")
+    workspaces      Workspace[]
 
     monthlyHours Int?
     hourlyRate   Int?
 
     //TimeStamps
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
+    createdAt   DateTime    @default(now())
+    updatedAt   DateTime    @updatedAt
+    timeEntries TimeEntry[]
 
     //Indexes
     @@index([email])
@@ -45,75 +46,104 @@ model User {
 }
 
 model Team {
-    id          String   @id @default(cuid())
-    name        String   @unique
+    id          String      @id @default(cuid())
+    name        String      @unique
     description String?
-    code        String   @unique
+    code        String      @unique
     members     User[]
     workspaces  Workspace[]
-    
+
     //TimeStamps
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
 
     //Map
     @@map("teams")
 }
 
 model Project {
-    id          String   @id @default(cuid())
+    id          String     @id @default(cuid())
     name        String
     description String?
     userId      String
-    user        User     @relation(fields: [userId], references: [id])
+    user        User       @relation(fields: [userId], references: [id])
     workspaceId String?
     workspace   Workspace? @relation(fields: [workspaceId], references: [id])
     tasks       Task[]
-    members     User[]   @relation("ProjectMembers")
+    members     User[]     @relation("ProjectMembers")
 
-    status      String   @default("ACTIVE")
-    color       String?  @default("#3b82f6")
-    startDate   DateTime?
-    endDate     DateTime?
+    status    String    @default("ACTIVE")
+    color     String?   @default("#3b82f6")
+    startDate DateTime?
+    endDate   DateTime?
 
-    createdAt   DateTime @default(now())
-    updatedAt   DateTime @updatedAt
+    createdAt   DateTime    @default(now())
+    updatedAt   DateTime    @updatedAt
+    timeEntries TimeEntry[]
 
     @@map("projects")
 }
 
 model Task {
-    id            String   @id @default(cuid())
+    id            String    @id @default(cuid())
     title         String
     description   String?
-    status        String   @default("TODO")
-    priority      String?  @default("MEDIUM")
+    status        String    @default("TODO")
+    priority      String?   @default("MEDIUM")
     estimatedTime String?
     dueDate       DateTime?
     tags          String[]
 
-    userId        String
-    user          User     @relation(fields: [userId], references: [id])
-    projectId     String?
-    project       Project? @relation(fields: [projectId], references: [id])
+    userId    String
+    user      User     @relation(fields: [userId], references: [id])
+    projectId String?
+    project   Project? @relation(fields: [projectId], references: [id])
 
-    createdAt     DateTime @default(now())
-    updatedAt     DateTime @updatedAt
+    createdAt   DateTime    @default(now())
+    updatedAt   DateTime    @updatedAt
+    timeEntries TimeEntry[]
 
     @@map("tasks")
 }
 
 model Workspace {
-    id        String    @id @default(cuid())
-    name      String
+    id          String    @id @default(cuid())
+    name        String
     description String?
-    userId    String
-    user      User      @relation(fields: [userId], references: [id])
-    teamId    String?
-    team      Team?     @relation(fields: [teamId], references: [id])
-    projects  Project[]
-    createdAt DateTime  @default(now())
-    updatedAt DateTime  @updatedAt
+    userId      String
+    user        User      @relation(fields: [userId], references: [id])
+    teamId      String?
+    team        Team?     @relation(fields: [teamId], references: [id])
+    projects    Project[]
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
 
     @@map("workspaces")
+}
+
+model TimeEntry {
+    id String @id @default(cuid())
+
+    taskId String
+    task   Task   @relation(fields: [taskId], references: [id])
+
+    userId String
+    user   User   @relation(fields: [userId], references: [id])
+
+    date      DateTime @default(now()) // Date of work
+    duration  Int // in minutes
+    projectId String?
+    project   Project? @relation(fields: [projectId], references: [id])
+    notes     String?
+
+    // For timer pauses (optional - can be JSON or separate model)
+    pausedTimes Json?
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    @@index([taskId])
+    @@index([userId])
+    @@index([date])
+    @@map("time_entries")
 }

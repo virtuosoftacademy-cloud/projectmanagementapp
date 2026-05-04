@@ -44,17 +44,17 @@ export default async function ProfilePage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-8">
+    <div className="px-8 space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
+        <h1 className="text-3xl tracking-tight font-bold text-gray-900">My Profile</h1>
         <p className="text-gray-500 mt-1">View and manage your personal information</p>
       </div>
 
-      <ProfileContent 
-        user={user} 
-        stats={stats} 
-        projects={projects} 
-        tasks={tasks} 
+      <ProfileContent
+        user={user}
+        stats={stats}
+        projects={projects}
+        tasks={tasks}
       />
     </div>
   );

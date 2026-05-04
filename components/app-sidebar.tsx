@@ -14,6 +14,10 @@ import {
 } from "@/components/ui/sidebar"
 import { Settings2Icon, Circle, LayoutDashboardIcon, Users, Users2, Folder, UserIcon } from "lucide-react"
 import { WorkspaceSwitcher } from "./workspace/WorkspaceSwitcher"
+import { User } from "@/app/types"
+import { AppSidebarProps } from "@/app/interface"
+import { transformTeams, transformUsers } from "@/app/lib/utils"
+import { prisma } from "@/app/lib/prisma"
 
 // This is sample data.
 const data = {
@@ -70,14 +74,8 @@ const data = {
 
 }
 
-interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  user: User
-  projects: any[]
-  workspaces: any[]
-  activeWorkspace: any
-}
 
-export function AppSidebar({ user, projects, workspaces, activeWorkspace, ...props }: AppSidebarProps) {
+export function AppSidebar({ projects, workspaces, activeWorkspace,user, ...props }: AppSidebarProps) {
 
   const projectItems = projects.map((p) => ({
     name: p.name,
@@ -99,11 +97,19 @@ export function AppSidebar({ user, projects, workspaces, activeWorkspace, ...pro
       },
       {
         title: "Campaigns",
-        url: `/dashboard/projects/campaigns/${p.id}`,
+        url: `/dashboard/projects/${p.id}/campaigns`,
       },
       {
         title: "Landing Pages",
-        url: `/dashboard/projects/landing-pages/${p.id}`,
+        url: `/dashboard/projects/${p.id}/landing-pages`,
+      },
+      {
+        title: "Worksheets",
+        url: `/dashboard/projects/${p.id}/worksheets`,
+      },
+      {
+        title: "Time Tracking",
+        url: `/dashboard/projects/time-tracking`,
       },
     ]
   }))
@@ -119,7 +125,7 @@ export function AppSidebar({ user, projects, workspaces, activeWorkspace, ...pro
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
-        <NavProjects projects={projectItems} />
+        <NavProjects projects={projectItems}/>
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} />

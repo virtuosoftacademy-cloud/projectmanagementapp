@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Role Based Access Control Demo(RBAC)",
+  title: "Project Management Application",
   description: "Created By Faisal Sagheer",
 };
 

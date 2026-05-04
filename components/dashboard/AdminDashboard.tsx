@@ -1,17 +1,15 @@
 'use client'
 
 import { apiClient } from "@/app/lib/apiclient";
-import { Role, Team, User } from "@/app/types";
+import { Role } from "@/app/types";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { Button } from "../ui/button";
 import { toast } from "sonner";
-
-interface AdminDashboardProps {
-    users: User[],
-    teams: Team[],
-    currentUser: User,
-}
+import { AdminDashboardProps } from "@/app/interface";
+import Link from "next/link";
+import { DeleteAlertDialog } from "./AlertDialog";
+import { CreateAccount } from "./CreateAccount";
 
 const AdminDashboard = ({
     users,
@@ -21,21 +19,21 @@ const AdminDashboard = ({
     const [isPending, startTransition] = useTransition();
     const router = useRouter()
 
-    const handleRemoveMember = async (userId: string) => {
-        startTransition(async () => {
-            try {
-                await apiClient.deleteUser(userId);
-                router.refresh();
-                toast.success(`User Deleted Successfully`)
-            } catch (error) {
-                alert(
-                    error instanceof Error
-                        ? error.message
-                        : "Error deletion"
-                )
-            }
-        })
-    }
+    // const handleRemoveMember = async (userId: string) => {
+    //     startTransition(async () => {
+    //         try {
+    //             await apiClient.deleteUser(userId);
+    //             router.refresh();
+    //             toast.success(`User Deleted Successfully`)
+    //         } catch (error) {
+    //             alert(
+    //                 error instanceof Error
+    //                     ? error.message
+    //                     : "Error deletion"
+    //             )
+    //         }
+    //     })
+    // }
 
     const handleTeamAssignment = async (userId: string, teamId: string | null) => {
         startTransition(async () => {
@@ -76,9 +74,14 @@ const AdminDashboard = ({
     return (
         <>
             <div className="px-6 space-y-2">
-                <div>
-                    <h2 className="text-2xl font-bold">Admin Dashboard</h2>
-                    <p >User & Team Management</p>
+                <div className="flex justify-between">
+                    <div>
+                        <h2 className="text-2xl font-bold">Admin Dashboard</h2>
+                        <p >User & Team Management</p>
+                    </div>
+                    <div>
+                        <CreateAccount/>
+                    </div>
                 </div>
                 {/* Stats */}
                 <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6">
@@ -112,7 +115,6 @@ const AdminDashboard = ({
                         </div>
                         Teams
                     </div>
-
                 </div>
                 <div className="grid md:grid-cols-2 gap-6">
                     {/*Users table with role and team assignment*/}
@@ -145,7 +147,7 @@ const AdminDashboard = ({
                                 </thead>
                                 <tbody>
                                     {
-                                        users.map((user) => (
+                                        users.map(user => (
                                             <tr key={user.id} className="border-b border-slate-700">
                                                 <td className="py-2">
                                                     <div className="flex items-center space-x-2">
@@ -202,13 +204,14 @@ const AdminDashboard = ({
                                                     }
                                                 </td>
                                                 <td className="py-2">
-                                                    <Button
+                                                    {/* <Button
                                                         onClick={() => handleRemoveMember(user.id)}
                                                         disabled={isPending}
                                                         variant={"destructive"}
                                                     >
                                                         Remove
-                                                    </Button>
+                                                    </Button> */}
+                                                    <DeleteAlertDialog userId={user.id} userName={user.name}/>
                                                 </td>
                                             </tr>
                                         ))
@@ -231,9 +234,9 @@ const AdminDashboard = ({
                                             Name
                                         </th>
 
-                                        <th className="text-left py-2">
+                                        {/* <th className="text-left py-2">
                                             Code
-                                        </th>
+                                        </th> */}
 
                                         <th className="text-left py-2">
                                             Members
@@ -264,12 +267,12 @@ const AdminDashboard = ({
                                                 <td className="py-2 font-medium">
                                                     {team.name}
                                                 </td>
-                                                <td className="py-2">
-                                                        <span key={teamMembers[0].id} className="bg-green-700 text-white p-1 rounded">
-                                                            {teamMembers[0].team?.code}
-                                                        </span>
-                                                        {/* {team?.code} */}
-                                                </td>
+                                                {/* <td className="py-2"> */}
+                                                    {/* <span key={teamMembers[0].id} className="bg-green-700 text-white p-1 rounded">
+                                                        {teamMembers[0].team?.code || ""}
+                                                    </span> */}
+                                                    {/* {team?.code} */}
+                                                {/* </td> */}
                                                 <td className="py-2 font-medium">
                                                     {teamMembers.length} users
                                                 </td>

@@ -3,6 +3,7 @@
 import { useState } from "react"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -21,10 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Plus, Check, CalendarIcon } from "lucide-react"
+import { Plus, Check, CalendarIcon, PlusCircle } from "lucide-react"
 import { createProject } from "@/app/lib/actions/projects"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Role, Team, User } from "@/app/types"
 
 const COLORS = [
   "var(--primary)", // Primary
@@ -37,13 +39,15 @@ const COLORS = [
 
 interface CreateProjectDialogProps {
   workspaceId: string
-  teamMembers: any[]
+  showButton?: boolean
+  users: User[];
+  teams: Team[];
 }
 
-export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectDialogProps) {
-  const [open, setOpen] = useState(false)
+
+export function CreateProjectDialog({ workspaceId, teams=[], users=[], showButton }: CreateProjectDialogProps) {
   const [loading, setLoading] = useState(false)
-  
+
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState("PLANNING")
@@ -73,7 +77,6 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
     setLoading(false)
     if (result.success) {
       toast.success("Project created successfully")
-      setOpen(false)
       // Reset form
       setName("")
       setDescription("")
@@ -88,18 +91,25 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
   }
 
   const toggleMember = (id: string) => {
-    setSelectedMembers(prev => 
+    setSelectedMembers(prev =>
       prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
     )
   }
-
+  // console.log("Team members in CreateProjectDialog:", users.length)
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4" />
-          <span className="text-sm">New Project</span>
-        </Button>
+        {showButton === true ?
+          <Button>
+            <Plus className="h-4 w-4" />
+            <span className="text-sm">New Project</span>
+          </Button>
+          :
+          <div>
+            <PlusCircle className="cursor-pointer size-4 mr-2" />
+          </div>
+        }
+
       </DialogTrigger>
       <DialogContent className="sm:max-w-[550px] overflow-y-auto max-h-[90vh]">
         <DialogHeader>
@@ -112,9 +122,9 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
         <div className="space-y-6 py-4">
           <div className="space-y-2">
             <Label htmlFor="name" className="text-sm font-semibold">Name</Label>
-            <Input 
-              id="name" 
-              placeholder="e.g. Marketing Site" 
+            <Input
+              id="name"
+              placeholder="e.g. Marketing Site"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
@@ -122,9 +132,9 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
 
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm font-semibold">Description</Label>
-            <Textarea 
-              id="description" 
-              placeholder="What is this project about?" 
+            <Textarea
+              id="description"
+              placeholder="What is this project about?"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="resize-none"
@@ -169,8 +179,8 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
             <div className="space-y-2">
               <Label htmlFor="startDate" className="text-sm font-semibold">Start Date</Label>
               <div className="relative">
-                <Input 
-                  id="startDate" 
+                <Input
+                  id="startDate"
                   type="date"
                   className="pl-10"
                   value={startDate}
@@ -182,8 +192,8 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
             <div className="space-y-2">
               <Label htmlFor="endDate" className="text-sm font-semibold">End Date</Label>
               <div className="relative">
-                <Input 
-                  id="endDate" 
+                <Input
+                  id="endDate"
                   type="date"
                   className="pl-10"
                   value={endDate}
@@ -197,18 +207,19 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
           <div className="space-y-3">
             <Label className="text-sm font-semibold">Members</Label>
             <div className="grid grid-cols-2 gap-3 border rounded-xl p-4 bg-gray-50/50">
-              {teamMembers.map((member) => (
+              {users.map((member) => (
                 <div key={member.id} className="flex items-center space-x-2">
-                  <Checkbox 
-                    id={`member-${member.id}`} 
+                  <Checkbox
+                    id={member.id}
                     checked={selectedMembers.includes(member.id)}
                     onCheckedChange={() => toggleMember(member.id)}
                   />
-                  <Label 
-                    htmlFor={`member-${member.id}`}
+                  <Label
+                    htmlFor={member.id}
                     className="text-sm cursor-pointer"
                   >
-                    {member.name}
+
+                    <span key={member.id}>{member.name}</span>
                   </Label>
                 </div>
               ))}
@@ -216,15 +227,14 @@ export function CreateProjectDialog({ workspaceId, teamMembers }: CreateProjectD
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={loading}>
+        <DialogFooter className="space-x-1">
+          <DialogClose className="px-4 py-2 bg-accent rounded-md border" >
             Cancel
-          </Button>
-          <Button 
+          </DialogClose>
+          <Button
             onClick={handleSubmit}
-            disabled={loading}
           >
-            {loading ? "Creating..." : "Create Project"}
+            Create Project
           </Button>
         </DialogFooter>
       </DialogContent>
