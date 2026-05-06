@@ -603,24 +603,24 @@ export function Sidebar({ className }: SidebarProps) {
   };
 
   // Compute current logo URL from display settings and theme
-  // const currentLogoUrl = useMemo(() => {
-  //   // Always use default logos as fallback - this ensures logo always displays
-  //   const defaultLight = "/images/logo-light.png";
-  //   const defaultDark = "/images/logo-dark.png";
+  const currentLogoUrl = useMemo(() => {
+    // Always use default logos as fallback - this ensures logo always displays
+    const defaultLight = "/images/logo-light.png";
+    const defaultDark = "/images/logo-dark.png";
 
-  //   // Try to get custom logos from display settings, but fallback to defaults
-  //   const branding = displaySettings?.branding;
-  //   const light = branding?.logoLight || defaultLight;
-  //   const dark = branding?.logoDark || defaultDark;
+    // Try to get custom logos from display settings, but fallback to defaults
+    const branding = displaySettings?.branding;
+    const light = branding?.logoLight || defaultLight;
+    const dark = branding?.logoDark || defaultDark;
 
-  //   // Return appropriate logo based on theme
-  //   let logoUrl;
-  //   if (resolvedTheme === "dark") logoUrl = dark;
-  //   else if (resolvedTheme === "light") logoUrl = light;
-  //   else logoUrl = light; // Default to light theme
+    // Return appropriate logo based on theme
+    let logoUrl;
+    if (resolvedTheme === "dark") logoUrl = dark;
+    else if (resolvedTheme === "light") logoUrl = light;
+    else logoUrl = light; // Default to light theme
 
-  //   return logoUrl;
-  // }, [displaySettings?.branding, resolvedTheme]);
+    return logoUrl;
+  }, [displaySettings?.branding, resolvedTheme]);
 
   const currentIconUrl = useMemo(() => {
     const defaultIcon = "/favicon.ico";
@@ -700,7 +700,7 @@ export function Sidebar({ className }: SidebarProps) {
             isCollapsed ? "flex-1 justify-center gap-0" : "flex-1 gap-3"
           )}
         >
-          {/* <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center">
             <Image
               src={isCollapsed ? currentIconUrl : currentLogoUrl}
               loading="lazy"
@@ -709,15 +709,10 @@ export function Sidebar({ className }: SidebarProps) {
               height={isCollapsed ? 32 : 36}
               className={cn(
                 "object-contain",
-                isCollapsed ? "h-8 w-8" : "h-8 w-auto max-w-[140px]"
+                isCollapsed ? "h-8 w-8" : "h-8 w-auto max-w-35"
               )}
             />
-          </div> */}
-          {!isCollapsed && (
-            <span className="text-lg font-semibold text-gray-900 dark:text-white">
-              PropertyManagement
-            </span>
-          )}
+          </div>
         </Link>
         <Button
           variant="ghost"

@@ -1,22 +1,17 @@
 {
   "properties.header.title": "Properties",
   "properties.header.subtitle": "Manage your property portfolio",
-
   "properties.accessDenied.title": "Access denied",
   "properties.accessDenied.description": "Please sign in to view properties.",
-
   "properties.actions.refresh": "Refresh",
   "properties.actions.addProperty.full": "Add Property",
   "properties.actions.addProperty.short": "Add",
   "properties.actions.addFirstProperty": "Add First Property",
   "properties.actions.retry": "Try Again",
-
   "properties.bulk.selected": "{count} selected",
-
   "properties.view.grid": "Grid",
   "properties.view.rows": "Rows",
   "properties.view.list": "List",
-
   "properties.filters.search.placeholder": "Search properties...",
   "properties.filters.type.all": "All Types",
   "properties.filters.status.all": "All Statuses",
@@ -30,11 +25,11 @@
   "properties.filters.unitType.placeholder": "Unit Type",
   "properties.filters.unitType.all": "All Units",
   "properties.filters.clear": "Clear",
-
+  "properties.filters.priceRange.under": "Minimum Rent",
+  "properties.filters.priceRange.over": "Maximum Rent",
 
   "owner.type.company": "Company",
   "owner.type.individual": "Individual",
-
   "properties.type.apartment": "Apartment",
   "properties.type.house": "House",
   "properties.type.condo": "Condo",
@@ -43,19 +38,16 @@
   "properties.type.office": "Office",
   "properties.type.retail": "Retail",
   "properties.type.unknown": "Unknown",
-
   "properties.unitType.apartment": "Apartment",
   "properties.unitType.studio": "Studio",
   "properties.unitType.penthouse": "Penthouse",
   "properties.unitType.loft": "Loft",
   "properties.unitType.room": "Room",
-
   "properties.units.types.apartment": "Apartment",
   "properties.units.types.studio": "Studio",
   "properties.units.types.penthouse": "Penthouse",
   "properties.units.types.loft": "Loft",
   "properties.units.types.room": "Room",
-
   "properties.table.property": "Property",
   "properties.table.status": "Status",
   "properties.table.contact": "Contact",
@@ -67,7 +59,6 @@
   "properties.table.selectAll": "Select all properties",
   "properties.table.selectProperty": "Select {name}",
   "properties.table.propertyOwner": "Property Owner",
-
   "properties.labels.unknown": "Unknown",
   "properties.labels.locationUnavailable": "Location unavailable",
   "properties.labels.unit": "Unit",
@@ -78,13 +69,11 @@
   "properties.labels.squareFeetUnit": "sq ft",
   "properties.labels.deleted": "Deleted",
   "properties.labels.deletedWithDate": "Deleted: {date}",
-
   "properties.status.available": "Available",
   "properties.status.occupied": "Occupied",
   "properties.status.maintenance": "Maintenance",
   "properties.status.unavailable": "Unavailable",
   "properties.status.unknown": "Unknown",
-
   "properties.units.available": "available",
   "properties.units.occupied": "occupied",
   "properties.units.maintenance": "maintenance",
@@ -150,25 +139,22 @@
   "properties.units.parking.type.covered": "Covered",
   "properties.units.parking.type.open": "Open",
   "properties.units.parking.type.street": "Street",
+  "properties.units.parking.type.label":"Type",
   "properties.units.parking.gated": "Gated Parking",
   "properties.units.parking.assigned": "Assigned Spot",
   "properties.units.toasts.add.success": "Unit added successfully",
   "properties.units.toasts.add.error": "Failed to add unit",
   "properties.units.toasts.update.success": "Unit updated successfully!",
   "properties.units.toasts.update.error": "Failed to update unit",
-
   "properties.empty.title": "No properties found",
   "properties.empty.addFirst": "Add First Property",
-
   "properties.error.fetchFailed": "Failed to fetch properties",
   "properties.toasts.statusUpdate.success": "Property status updated successfully",
   "properties.toasts.statusUpdate.error": "Failed to update property status",
-
   "properties.pagination.summary": "Showing {from} to {to} of {total} properties",
   "properties.pagination.previous": "Previous",
   "properties.pagination.prevShort": "Prev",
   "properties.pagination.next": "Next",
-
   "properties.stats.totalProperties.title": "Total Properties",
   "properties.stats.totalProperties.description": "All property listings",
   "properties.stats.availableProperties.title": "Available Properties",
@@ -189,7 +175,6 @@
   "properties.stats.occupiedUnits.description": "Currently rented",
   "properties.stats.unitsInMaintenance.title": "Units in Maintenance",
   "properties.stats.unitsInMaintenance.description": "Under repair",
-
   "properties.menu.actions": "Actions",
   "properties.menu.viewDetails": "View Details",
   "properties.menu.editProperty": "Edit Property",
@@ -197,15 +182,11 @@
   "properties.menu.markOccupied": "Mark Occupied",
   "properties.menu.markMaintenance": "Mark Maintenance",
   "properties.menu.markUnavailable": "Mark Unavailable",
-
   "properties.row.unknownProperty": "Unknown Property",
   "properties.row.addressUnavailable": "Address unavailable",
-
   "properties.form.general.title": "General Information",
   "properties.form.general.description": "Provide key details about your property.",
-
   "properties.form.address.title": "Address",
-
   "properties.form.fields.ownerName.label": "FullName / Company Name",
   "properties.form.fields.name.label": "Property name",
   "properties.form.fields.ownerName.placeholder": "e.g., Jhon Doe",
@@ -227,7 +208,6 @@
   "properties.form.fields.zipCode.label": "ZIP/Postal code",
   "properties.form.fields.zipCode.placeholder": "e.g., 94105",
   "properties.form.fields.country.label": "Country",
-
   "properties.form.units.intro": "Configure the rental units for this property.",
   "properties.form.units.title": "Unit Management",
   "properties.form.units.description": "Manage all units for this property, including size, rent amount, and current status.",
@@ -244,14 +224,12 @@
   "properties.form.units.fields.images": "Unit Images",
   "properties.form.units.uploadImages": "Upload unit images",
   "properties.form.units.placeholders.floor": "e.g., 3",
-
   "properties.form.amenities.title": "Amenities & Features",
   "properties.form.amenities.description": "Select the core amenities and features that best describe this property.",
   "properties.form.amenities.custom.label": "Add custom amenity or feature",
   "properties.form.amenities.custom.placeholder": "e.g., Rooftop terrace, Smart home features...",
   "properties.form.amenities.selected.label": "Selected amenities ({count})",
   "properties.form.amenities.selected.remove": "Remove {name}",
-
   "properties.amenities.items.parking": "Parking",
   "properties.amenities.items.evCharging": "EV charging",
   "properties.amenities.items.pool": "Swimming pool",
@@ -270,20 +248,16 @@
   "properties.amenities.items.elevator": "Elevator",
   "properties.amenities.items.storage": "Storage",
   "properties.amenities.items.fireplace": "Fireplace",
-
   "properties.form.images.title": "Property Images",
   "properties.form.images.description": "Upload high-quality images to showcase your property.",
   "properties.form.images.count": "{count} image(s) uploaded",
-
   "properties.form.actions.create": "Create property",
   "properties.form.actions.update": "Save changes",
-
   "properties.form.alert.unitRequired.title": "Unit configuration required",
   "properties.form.alert.unitRequired.summary": "At least one unit must be configured before creating the property.",
   "properties.form.alert.unitRequired.callout": "Action required:",
   "properties.form.alert.unitRequired.instructions": "Scroll to the Unit Management section below and click \"Add Unit\" to configure your first unit with details like bedrooms, bathrooms, and rent amount.",
   "properties.form.alert.unitRequired.cta": "Got it, I'll add a unit",
-
   "properties.form.validation.ownerNameRequired": "Name is required.",
   "properties.form.validation.nameRequired": "Property name is required.",
   "properties.form.validation.streetRequired": "Street address is required.",
@@ -293,7 +267,6 @@
   "properties.form.validation.zipTooLong": "ZIP/Postal code must be 20 characters or less.",
   "properties.form.validation.yearBuiltMin": "Year built cannot be earlier than 1800.",
   "properties.form.validation.yearBuiltMax": "Year built cannot be in the future.",
-
   "properties.newProperty.title": "Create new property",
   "properties.newProperty.subtitle": "Add a new property to your portfolio with comprehensive details and integrated unit management.",
   "properties.newProperty.backToList": "Back to Properties",
@@ -408,48 +381,39 @@
   "properties.unitDetails.utilities.status.tenant": "tenant",
   "properties.unitDetails.utilities.status.shared": "shared",
   "properties.unitDetails.fields.yearBuilt": "Year Built",
-
   "properties.labels.yes": "Yes",
   "properties.labels.no": "No",
-
   "properties.details.common.notAvailable": "Not available",
-
   "properties.details.unknownProperty": "Unknown Property",
   "properties.details.notFound.title": "Property not found",
   "properties.details.notFound.description": "We couldn't find the property you're looking for. It may have been removed or the URL might be incorrect.",
   "properties.details.error.title": "Error loading property",
   "properties.details.error.fetchFailed": "Failed to load property details. Please try again.",
-
   "properties.details.actions.backToList": "Back to Properties",
   "properties.details.actions.retry": "Retry",
   "properties.details.actions.editProperty": "Edit Property",
   "properties.details.actions.deleteProperty": "Delete Property",
-
   "properties.details.tabs.overview": "Overview",
   "properties.details.tabs.details": "Details",
   "properties.details.tabs.units": "Units",
   "properties.details.tabs.images": "Images",
   "properties.details.tabs.amenities": "Amenities",
-
   "properties.details.overview.propertyType": "Property Type",
   "properties.details.overview.totalUnits": "Total Units",
   "properties.details.overview.bedrooms": "Bedrooms",
   "properties.details.overview.availableUnits": "Available Units",
   "properties.details.overview.bathrooms": "Bathrooms",
   "properties.details.overview.totalSquareFootage": "Total Square Footage",
-
   "properties.details.overview.occupancy.title": "Occupancy Overview",
   "properties.details.overview.occupancy.subtitle": "Real-time unit status",
   "properties.details.overview.occupancy.rateLabel": "Occupancy Rate",
   "properties.details.overview.occupancy.summary": "{occupied} of {total} units occupied",
-
   "properties.details.location.title": "Property Location",
   "properties.details.location.subtitle": "Address details",
   "properties.details.location.street": "Street Address",
   "properties.details.location.city": "City",
   "properties.details.location.state": "State",
   "properties.details.location.postalCode": "ZIP Code",
-
   "properties.details.financial.title": "Financial Overview",
   "properties.details.financial.subtitle": "Revenue & pricing",
   "properties.details.financial.monthlyRent.label": "Monthly Rent",
@@ -458,7 +422,6 @@
   "properties.details.financial.securityDeposit.helper": "Upfront cost",
   "properties.details.financial.pricePerSquareFoot.label": "Price per {unit}",
   "properties.details.financial.pricePerSquareFoot.helper": "Market rate",
-
   "properties.details.specs.title": "Property Specifications",
   "properties.details.specs.subtitle": "Detailed property information and characteristics",
   "properties.details.specs.fields.type": "Type",
@@ -476,38 +439,30 @@
   "properties.details.specs.fields.rentRange": "Rent Range",
   "properties.details.specs.fields.yearBuilt": "Year Built",
   "properties.details.specs.fields.description": "Description",
-
   "properties.details.features.title": "Property Features",
   "properties.details.features.subtitle": "Special features and highlights of this property",
   "properties.details.amenities.title": "Property Amenities",
   "properties.details.amenities.subtitle": "Available amenities and facilities",
-
   "properties.amenities.validation.requiredFields": "Please fill in the required fields.",
   "properties.amenities.toasts.addSuccess": "Amenity added successfully.",
   "properties.amenities.toasts.addError": "Failed to add amenity.",
   "properties.amenities.toasts.removeSuccess": "Amenity removed successfully.",
   "properties.amenities.toasts.removeError": "Failed to remove amenity.",
-
   "properties.amenities.empty.title": "No Amenities Listed",
   "properties.amenities.empty.description": "No amenities have been added to this property yet.",
   "properties.amenities.empty.addFirst": "Add First Amenity",
-
   "properties.amenities.header.title": "Property Amenities",
   "properties.amenities.header.summary": "Total amenities: {count}",
-
   "properties.amenities.actions.add": "Add Amenity",
   "properties.amenities.actions.adding": "Adding...",
-
   "properties.amenities.dialog.addTitle": "Add Amenity",
   "properties.amenities.dialog.addDescription": "Add key amenities to highlight what makes this property stand out.",
-
   "properties.amenities.form.name.label": "Amenity Name",
   "properties.amenities.form.name.placeholder": "e.g., Pool, Gym, 24/7 Security...",
   "properties.amenities.form.category.label": "Category",
   "properties.amenities.form.category.placeholder": "Select a category",
   "properties.amenities.form.description.label": "Description (Optional)",
   "properties.amenities.form.description.placeholder": "Optional: add a short description for this amenity",
-
   "properties.amenities.categories.kitchen": "Kitchen",
   "properties.amenities.categories.bathroom": "Bathroom",
   "properties.amenities.categories.living": "Living Area",
@@ -520,38 +475,29 @@
   "properties.amenities.categories.laundry": "Laundry",
   "properties.amenities.categories.climate": "Climate Control",
   "properties.amenities.categories.other": "Other",
-
   "properties.images.header.title": "Property Images",
   "properties.images.header.summary": "Total images: {count}",
-
   "properties.images.toasts.addSuccess": "Successfully added {count} image(s).",
   "properties.images.toasts.addError": "Failed to add images.",
-
   "properties.images.empty.title": "No Images Available",
   "properties.images.empty.description": "No images have been uploaded for this property yet.",
   "properties.images.empty.addFirst": "Add First Image",
-
   "properties.images.actions.add": "Add Image",
   "properties.images.actions.view": "View",
-
   "properties.images.dialog.addTitle": "Add New Images",
   "properties.images.dialog.addDescription": "Upload high-quality images to showcase your property. Multiple files supported.",
   "properties.images.dialog.helper": "Images will be automatically optimized for web display.",
   "properties.images.dialog.processing": "Processing...",
   "properties.images.dialog.done": "Done",
-
   "properties.images.viewer.title": "Property Image",
   "properties.images.viewer.close": "Close",
   "properties.images.viewer.openInNewTab": "Open in New Tab",
-
   "properties.images.alt.thumbnail": "{name} - Image {index}",
   "properties.images.alt.main": "{name} - Main image",
-
   "properties.status.description.available": "Property is available for rent.",
   "properties.status.description.occupied": "Property is currently occupied by tenants.",
   "properties.status.description.maintenance": "Property is under maintenance.",
   "properties.status.description.unavailable": "Property is not available for rent.",
-
   "properties.statusManager.button.changeStatus": "Change Status",
   "properties.statusManager.menu.label": "Update Property Status",
   "properties.statusManager.badge.current": "Current",
@@ -559,23 +505,19 @@
   "properties.statusManager.confirm.description": "Are you sure you want to change the property status to {status}? This will affect the property's availability and visibility.",
   "properties.statusManager.confirm.updating": "Updating...",
   "properties.statusManager.confirm.update": "Update Status",
-
   "properties.details.overview.actions.viewAllUnits": "View All Units",
   "properties.details.overview.actions.addUnit": "Add Unit",
   "properties.details.units.refreshError": "Failed to refresh units",
-
   "properties.available.header.title": "Available Units",
   "properties.available.header.subtitle": "Individual units currently available for rent",
   "properties.available.actions.refresh": "Refresh",
   "properties.available.actions.addProperty": "Add Property",
-
   "properties.available.card.title": "Available Units",
   "properties.available.card.subtitle": "Individual units currently available for rent",
   "properties.available.card.available": "Available",
   "properties.available.card.unit": "Unit",
   "properties.available.card.floor": "Floor {floor}",
   "properties.available.card.perMonth": "/month",
-
   "properties.available.filters.search.placeholder": "Search available units...",
   "properties.available.filters.type.all": "All Types",
   "properties.available.filters.bedrooms.any": "Any Beds",
@@ -591,10 +533,8 @@
   "properties.available.filters.bathrooms.fourPlus": "4+ Baths",
   "properties.available.filters.unitType.all": "All Units",
   "properties.available.filters.clear": "Clear",
-
   "properties.available.menu.viewUnitDetails": "View Unit Details",
   "properties.available.menu.viewProperty": "View Property",
-
   "properties.available.table.unit": "Unit",
   "properties.available.table.property": "Property",
   "properties.available.table.location": "Location",
@@ -603,15 +543,12 @@
   "properties.available.table.actions": "Actions",
   "properties.available.table.squareFeet": "sq ft",
   "properties.available.table.perMonth": "/month",
-
   "properties.available.empty.title": "No available units found",
   "properties.available.empty.addProperty": "Add Property",
   "properties.available.error.tryAgain": "Try Again",
-
   "properties.available.pagination.previous": "Previous",
   "properties.available.pagination.next": "Next",
   "properties.available.pagination.page": "Page {page} of {pages}",
-
   "properties.available.stats.totalUnits.title": "Total Units",
   "properties.available.stats.totalUnits.description": "Across {count} {plural}",
   "properties.available.stats.totalUnits.property": "property",

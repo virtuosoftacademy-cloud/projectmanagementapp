@@ -747,6 +747,7 @@ export function EnhancedPropertyForm({
                   <div className="space-y-2">
                     <Label>{t("properties.form.units.fields.floor")}</Label>
                     <Input
+                      min={1}
                       type="number"
                       value={unit.floor || ""}
                       onChange={(e) => {
@@ -760,9 +761,10 @@ export function EnhancedPropertyForm({
                       )}
                     />
                   </div>
-                  <div className="space-y-2">
+                  {/* <div className="space-y-2">
                     <Label>{t("properties.form.units.fields.bedrooms")}</Label>
                     <Input
+                      min={1}
                       type="number"
                       value={unit.bedrooms}
                       onChange={(e) => {
@@ -772,10 +774,11 @@ export function EnhancedPropertyForm({
                         setUnits(newUnits);
                       }}
                     />
-                  </div>
+                  </div> */}
                   <div className="space-y-2">
                     <Label>{t("properties.form.units.fields.bathrooms")}</Label>
                     <Input
+                      min={1}
                       type="number"
                       value={unit.bathrooms}
                       onChange={(e) => {
@@ -791,6 +794,7 @@ export function EnhancedPropertyForm({
                       {t("properties.form.units.fields.squareFootage")}
                     </Label>
                     <Input
+                      min={50}
                       type="number"
                       value={unit.squareFootage}
                       onChange={(e) => {
@@ -806,6 +810,7 @@ export function EnhancedPropertyForm({
                       {t("properties.form.units.fields.rentAmount")}
                     </Label>
                     <Input
+                      min={1}
                       type="number"
                       value={unit.rentAmount}
                       onChange={(e) => {
@@ -945,22 +950,20 @@ export function EnhancedPropertyForm({
               return (
                 <div
                   key={item}
-                  className={`group relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${
-                    selectedAmenities.includes(item)
-                      ? "border-blue-500 bg-blue-50 text-blue-700 shadow-blue-100 dark:bg-blue-950/30 dark:border-blue-400 dark:text-blue-300"
-                      : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-blue-600 dark:hover:bg-blue-950/20"
-                  }`}
+                  className={`group relative p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-md ${selectedAmenities.includes(item)
+                    ? "border-blue-500 bg-blue-50 text-blue-700 shadow-blue-100 dark:bg-blue-950/30 dark:border-blue-400 dark:text-blue-300"
+                    : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/50 dark:border-gray-700 dark:bg-gray-800/50 dark:hover:border-blue-600 dark:hover:bg-blue-950/20"
+                    }`}
                   onClick={() => handleAmenityToggle(item)}
                 >
                   <div className="flex items-center gap-3">
                     <Checkbox
                       checked={selectedAmenities.includes(item)}
-                      onChange={() => {}}
-                      className={`pointer-events-none transition-colors ${
-                        selectedAmenities.includes(item)
-                          ? "data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
-                          : ""
-                      }`}
+                      onChange={() => { }}
+                      className={`pointer-events-none transition-colors ${selectedAmenities.includes(item)
+                        ? "data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                        : ""
+                        }`}
                     />
                     <span className="flex-1 font-medium text-sm leading-tight">
                       {t(labelKey)}

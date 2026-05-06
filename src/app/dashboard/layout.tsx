@@ -106,14 +106,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   )}
                 </Button>
 
-                <div className="relative">
+                {/* <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
                     type="search"
                     placeholder="Search..."
                     className="w-48 sm:w-64 md:w-72 lg:w-80 rounded-xl border border-border/50 bg-card/60 backdrop-blur-sm pl-10 pr-4 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 transition-all duration-150 hover:bg-card/80 focus:border-border"
                   />
-                </div>
+                </div> */}
               </div>
 
               {/* Right Side */}

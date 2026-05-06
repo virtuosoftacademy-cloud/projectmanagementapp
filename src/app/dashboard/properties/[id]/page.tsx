@@ -387,7 +387,7 @@ export default function PropertyDetailsPage() {
           <h3 className="text-xl font-bold text-gray-900 dark:text-white capitalize">
             {property?.name || t("properties.details.unknownProperty")}
           </h3>
-          {/* <div className="flex items-center justify-center space-x-2 mt-2">
+          <div className="flex items-center justify-center space-x-2 mt-2">
             {property?.status && (
               <Badge variant="outline">
                 {t(`properties.status.${property.status}`)}
@@ -398,7 +398,7 @@ export default function PropertyDetailsPage() {
                 {t(`properties.type.${property.type}`)}
               </Badge>
             )}
-          </div> */}
+          </div>
         </div>
 
         {/* Right side - Action Buttons */}

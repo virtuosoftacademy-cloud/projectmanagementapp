@@ -275,8 +275,8 @@ export default function NewTenantPage() {
         if (!response.ok || !payload?.success) {
           throw new Error(
             payload?.error ||
-              payload?.message ||
-              `Failed to upload ${file.name}`
+            payload?.message ||
+            `Failed to upload ${file.name}`
           );
         }
 
@@ -407,22 +407,22 @@ export default function NewTenantPage() {
         ssn: data.ssn || undefined,
         employmentInfo: data.employer
           ? {
-              employer: data.employer,
-              position: data.position || "",
-              income: data.income || 0,
-              startDate: data.employmentStartDate || undefined,
-            }
+            employer: data.employer,
+            position: data.position || "",
+            income: data.income || 0,
+            startDate: data.employmentStartDate || undefined,
+          }
           : undefined,
         emergencyContacts:
           data.emergencyContactName && data.emergencyContactName.trim()
             ? [
-                {
-                  name: data.emergencyContactName,
-                  relationship: data.emergencyContactRelationship || "",
-                  phone: data.emergencyContactPhone || "",
-                  email: data.emergencyContactEmail || "",
-                },
-              ]
+              {
+                name: data.emergencyContactName,
+                relationship: data.emergencyContactRelationship || "",
+                phone: data.emergencyContactPhone || "",
+                email: data.emergencyContactEmail || "",
+              },
+            ]
             : [],
         creditScore: data.creditScore,
         moveInDate: data.moveInDate || undefined,
@@ -648,6 +648,7 @@ export default function NewTenantPage() {
                             </FormLabel>
                             <FormControl>
                               <Input
+                                maxLength={11}
                                 placeholder={t("tenants.form.fields.phone.placeholder")}
                                 className="h-11 border-2 border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 bg-background/50 transition-all duration-200"
                                 {...field}
@@ -1133,11 +1134,10 @@ export default function NewTenantPage() {
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                      className={`relative border-2 border-dashed rounded-lg transition-all duration-300 ${
-                        isDragging
+                      className={`relative border-2 border-dashed rounded-lg transition-all duration-300 ${isDragging
                           ? "border-primary bg-primary/5 scale-[1.02]"
                           : "border-border/60 hover:border-primary/50 bg-background/50"
-                      }`}
+                        }`}
                     >
                       <input
                         type="file"
@@ -1153,14 +1153,12 @@ export default function NewTenantPage() {
                         className="flex flex-col items-center justify-center py-12 px-6 cursor-pointer"
                       >
                         <div
-                          className={`rounded-full p-4 mb-4 transition-all duration-300 ${
-                            isDragging ? "bg-primary/20 scale-110" : "bg-primary/10"
-                          }`}
+                          className={`rounded-full p-4 mb-4 transition-all duration-300 ${isDragging ? "bg-primary/20 scale-110" : "bg-primary/10"
+                            }`}
                         >
                           <Upload
-                            className={`h-10 w-10 transition-colors duration-300 ${
-                              isDragging ? "text-primary" : "text-primary/70"
-                            }`}
+                            className={`h-10 w-10 transition-colors duration-300 ${isDragging ? "text-primary" : "text-primary/70"
+                              }`}
                           />
                         </div>
                         <p className="text-lg font-semibold text-foreground mb-2">
@@ -1224,8 +1222,8 @@ export default function NewTenantPage() {
                                         {file.type.includes("pdf")
                                           ? "PDF"
                                           : file.type.includes("word") || file.type.includes("document")
-                                          ? "DOC"
-                                          : file.name.split(".").pop()}
+                                            ? "DOC"
+                                            : file.name.split(".").pop()}
                                       </span>
                                     </div>
                                   )}

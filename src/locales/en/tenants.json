@@ -280,7 +280,7 @@
   "tenants.form.fields.email.label": "Email Address *",
   "tenants.form.fields.email.placeholder": "john.doe@email.com",
   "tenants.form.fields.phone.label": "Phone Number *",
-  "tenants.form.fields.phone.placeholder": "+1 (555) 123-4567",
+  "tenants.form.fields.phone.placeholder": "020 7123 4567",
   "tenants.form.fields.dateOfBirth.label": "Date of Birth *",
   "tenants.form.fields.dateOfBirth.placeholder": "Pick a date",
   "tenants.form.fields.ssn.label": "SSN (Optional)",

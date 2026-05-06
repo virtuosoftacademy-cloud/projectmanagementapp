@@ -59,14 +59,27 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { PropertyType, PropertyStatus, UserRole } from "@/types";
+import { PropertyType, PropertyStatus } from "@/types";
 import PropertyStats from "@/components/properties/PropertyStats";
 import { GlobalPagination } from "@/components/ui/global-pagination";
 import { PropertyRowCard } from "@/components/properties/PropertyRowCard";
 import { useViewPreferencesStore } from "@/stores/view-preferences.store";
 import { getFeaturedImage, hasPropertyImages } from "@/lib/utils/image-utils";
 import { useLocalizationContext } from "@/components/providers/LocalizationProvider";
-// import { formatCurrency } from "@/lib/api-utils";
+
+// ============================================================================
+// PRICE RANGES - Preset min/max bucket combinations for the rent filter
+// ============================================================================
+type PriceRange = {
+  id: string;
+  minRent?: number;
+  maxRent?: number;
+};
+
+const PRICE_RANGES: PriceRange[] = [
+  { id: "under-100", maxRent: 100 },
+  { id: "over-1000", minRent: 1000 },
+];
 
 interface PropertyCardProps {
   property: PropertyResponse;
@@ -231,8 +244,8 @@ function PropertyCard({
           <div className="flex items-center gap-2 mb-1">
             <h3
               className={`font-semibold text-lg line-clamp-1 ${property.deletedAt
-                  ? "text-gray-400 dark:text-gray-500 line-through"
-                  : "text-gray-900 dark:text-gray-100"
+                ? "text-gray-400 dark:text-gray-500 line-through"
+                : "text-gray-900 dark:text-gray-100"
                 }`}
             >
               {propertyName}
@@ -423,16 +436,23 @@ const getUnitStats = (units?: PropertyResponse["units"]) => {
   return stats;
 };
 
-// Helper function to get rent range for multi-unit properties
+// Helper function to get rent min/max numeric values from units
+const getRentBounds = (units?: PropertyResponse["units"]) => {
+  if (!units || units.length === 0) return null;
+  const rents = units.map((unit) => unit.rentAmount ?? 0);
+  return {
+    min: Math.min(...rents),
+    max: Math.max(...rents),
+  };
+};
+
+// Helper function to get rent range for multi-unit properties (formatted display)
 const getRentRange = (
   units?: PropertyResponse["units"],
   formatCurrency?: (amount: number) => string
 ) => {
-  if (!units || units.length === 0) return null;
-
-  const rents = units.map((unit) => unit.rentAmount ?? 0);
-  const minRent = Math.min(...rents);
-  const maxRent = Math.max(...rents);
+  const bounds = getRentBounds(units);
+  if (!bounds) return null;
 
   const format = formatCurrency
     ? formatCurrency
@@ -442,11 +462,11 @@ const getRentRange = (
         currency: "USD",
       }).format(amount);
 
-  if (minRent === maxRent) {
-    return format(minRent);
+  if (bounds.min === bounds.max) {
+    return format(bounds.min);
   }
 
-  return `${format(minRent)} - ${format(maxRent)}`;
+  return `${format(bounds.min)} - ${format(bounds.max)}`;
 };
 
 // Helper to determine if a property is occupied
@@ -461,6 +481,19 @@ const isPropertyOccupied = (property: PropertyResponse) => {
     );
   }
   return property.status === PropertyStatus.OCCUPIED;
+};
+
+// Find a price range entry whose minRent/maxRent match the current filter values.
+// Returns the matching id, or "any" if no preset matches.
+const findPriceRangeId = (
+  minRent: number | undefined,
+  maxRent: number | undefined
+) => {
+  if (minRent === undefined && maxRent === undefined) return "any";
+  const match = PRICE_RANGES.find(
+    (r) => r.minRent === minRent && r.maxRent === maxRent
+  );
+  return match ? match.id : "any";
 };
 
 export default function PropertiesPage() {
@@ -495,7 +528,7 @@ export default function PropertiesPage() {
 
   const [pagination, setPagination] = useState({
     page: 1,
-    limit: 10,
+    limit: 12,
     total: 0,
     pages: 0,
     hasNext: false,
@@ -527,8 +560,6 @@ export default function PropertiesPage() {
     fetchProperties();
   }, [fetchProperties]);
 
-  // Show/hide bulk actions based on selection - handled inline now
-
   // Memoized calculations for better performance
   const isAllSelected = useMemo(() => {
     return (
@@ -541,9 +572,57 @@ export default function PropertiesPage() {
       filters.search ||
       filters.type ||
       filters.status ||
-      filters.unitType
+      filters.unitType ||
+      filters.minRent !== undefined ||
+      filters.maxRent !== undefined
     );
-  }, [filters.search, filters.type, filters.status, filters.unitType]);
+  }, [
+    filters.search,
+    filters.type,
+    filters.status,
+    filters.unitType,
+    filters.minRent,
+    filters.maxRent,
+  ]);
+
+  // Resolve current price range selection from filters
+  const currentPriceRangeId = useMemo(
+    () => findPriceRangeId(filters.minRent, filters.maxRent),
+    [filters.minRent, filters.maxRent]
+  );
+
+  // Build a human-readable label for a price range entry, using the
+  // words "minRent" and "maxRent" as labels for each bound.
+
+  const getPriceRangeLabel = useCallback(
+    (range: PriceRange) => {
+      if (range.minRent === undefined && range.maxRent !== undefined) {
+        return t("properties.filters.priceRange.under", {
+          values: { max: formatCurrency(range.maxRent) },
+          defaultValue: `maxRent ${formatCurrency(range.maxRent)}`,
+        });
+      }
+      if (range.maxRent === undefined && range.minRent !== undefined) {
+        return t("properties.filters.priceRange.over", {
+          values: { min: formatCurrency(range.minRent) },
+          defaultValue: `minRent ${formatCurrency(range.minRent)}+`,
+        });
+      }
+      if (range.minRent !== undefined && range.maxRent !== undefined) {
+        return t("properties.filters.priceRange.between", {
+          values: {
+            min: formatCurrency(range.minRent),
+            max: formatCurrency(range.maxRent),
+          },
+          defaultValue: `minRent ${formatCurrency(
+            range.minRent
+          )} – maxRent ${formatCurrency(range.maxRent)}`,
+        });
+      }
+      return "";
+    },
+    [t, formatCurrency]
+  );
 
   const handleSearch = (search: string) => {
     setFilters((prev) => ({ ...prev, search, page: 1 }));
@@ -556,6 +635,28 @@ export default function PropertiesPage() {
     setFilters((prev) => ({ ...prev, [key]: value, page: 1 }));
   };
 
+  const handlePriceRangeChange = (id: string) => {
+    if (id === "any") {
+      setFilters((prev) => ({
+        ...prev,
+        minRent: undefined,
+        maxRent: undefined,
+        page: 1,
+      }));
+      return;
+    }
+
+    const range = PRICE_RANGES.find((r) => r.id === id);
+    if (!range) return;
+
+    setFilters((prev) => ({
+      ...prev,
+      minRent: range.minRent,
+      maxRent: range.maxRent,
+      page: 1,
+    }));
+  };
+
   const handlePageChange = (page: number) => {
     setFilters((prev) => ({ ...prev, page }));
   };
@@ -565,6 +666,15 @@ export default function PropertiesPage() {
     params.set("page", "1");
     router.push(`/dashboard/properties?${params.toString()}`);
     setFilters((prev) => ({ ...prev, limit: size, page: 1 }));
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      page: 1,
+      limit: 12,
+      sortBy: "createdAt",
+      sortOrder: "desc",
+    });
   };
 
   // DISABLED: Delete functionality temporarily disabled
@@ -1201,82 +1311,73 @@ export default function PropertiesPage() {
                 </SelectContent>
               </Select>
 
+              {/* Price Range */}
+              <Select
+                value={currentPriceRangeId}
+                onValueChange={handlePriceRangeChange}
+              >
+                <SelectTrigger className="w-[170px] h-10 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <SelectValue
+                    placeholder={t("properties.filters.priceRange.placeholder", {
+                      defaultValue: "Price range",
+                    })}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">
+                    {t("properties.filters.priceRange.any", {
+                      defaultValue: "Pricing Range",
+                    })}
+                  </SelectItem>
+                  {PRICE_RANGES.map((range) => (
+                    <SelectItem key={range.id} value={range.id}>
+                      {getPriceRangeLabel(range)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               {/* Sort */}
               <Select
-                value={`${filters.sortBy}-${filters.sortOrder}`}
+                value={`${filters.sortBy ?? "createdAt"}-${filters.sortOrder ?? "desc"
+                  }`}
                 onValueChange={(value) => {
-                  const [sortBy, sortOrder] = value.split("-");
+                  const lastDashIndex = value.lastIndexOf("-");
+                  const sortBy = value.substring(0, lastDashIndex);
+                  const sortOrder = value.substring(lastDashIndex + 1);
                   setFilters((prev) => ({
                     ...prev,
-                    sortBy: sortBy as
-                      | "name"
-                      | "rentAmount"
-                      | "createdAt"
-                      | "squareFootage",
-                    sortOrder: sortOrder as "asc" | "desc",
+                    sortBy: sortBy as PropertyQueryParams["sortBy"],
+                    sortOrder: sortOrder as PropertyQueryParams["sortOrder"],
+                    page: 1,
                   }));
                 }}
               >
-                <SelectTrigger className="w-[140px] h-10 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <SelectTrigger className="w-[160px] h-10 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                   <SelectValue
                     placeholder={t("properties.filters.sort.placeholder")}
                   />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="createdAt-desc">
-                    {t("properties.filters.sort.createdAt.desc")}
+                    {t("properties.filters.sort.createdAt.desc", {
+                      defaultValue: "Newest First",
+                    })}
                   </SelectItem>
                   <SelectItem value="createdAt-asc">
-                    {t("properties.filters.sort.createdAt.asc")}
+                    {t("properties.filters.sort.createdAt.asc", {
+                      defaultValue: "Oldest First",
+                    })}
                   </SelectItem>
                   <SelectItem value="name-asc">
-                    {t("properties.filters.sort.name.asc")}
+                    {t("properties.filters.sort.name.asc", {
+                      defaultValue: "Name (A-Z)",
+                    })}
                   </SelectItem>
                   <SelectItem value="name-desc">
-                    {t("properties.filters.sort.name.desc")}
-                  </SelectItem>
-                  <SelectItem value="rentAmount-desc">
-                    {t("properties.filters.sort.rentAmount.desc")}
-                  </SelectItem>
-                  <SelectItem value="rentAmount-asc">
-                    {t("properties.filters.sort.rentAmount.asc")}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Unit Type Filter */}
-              <Select
-                value={filters.unitType || "all"}
-                onValueChange={(value) =>
-                  handleFilterChange(
-                    "unitType",
-                    value === "all" ? undefined : value
-                  )
-                }
-              >
-                <SelectTrigger className="w-[140px] h-10 border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-                  <SelectValue
-                    placeholder={t("properties.filters.unitType.placeholder")}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">
-                    {t("properties.filters.unitType.all")}
-                  </SelectItem>
-                  <SelectItem value="apartment">
-                    {t("properties.unitType.apartment")}
-                  </SelectItem>
-                  <SelectItem value="studio">
-                    {t("properties.unitType.studio")}
-                  </SelectItem>
-                  <SelectItem value="penthouse">
-                    {t("properties.unitType.penthouse")}
-                  </SelectItem>
-                  <SelectItem value="loft">
-                    {t("properties.unitType.loft")}
-                  </SelectItem>
-                  <SelectItem value="room">
-                    {t("properties.unitType.room")}
+                    {t("properties.filters.sort.name.desc", {
+                      defaultValue: "Name (Z-A)",
+                    })}
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -1286,14 +1387,7 @@ export default function PropertiesPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() =>
-                    setFilters({
-                      page: 1,
-                      limit: 10,
-                      sortBy: "createdAt",
-                      sortOrder: "desc",
-                    })
-                  }
+                  onClick={handleClearFilters}
                   className="h-10 px-3 text-gray-500 hover:text-gray-700"
                 >
                   <X className="h-4 w-4 mr-1" />
