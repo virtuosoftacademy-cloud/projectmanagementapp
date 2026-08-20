@@ -1,0 +1,372 @@
+// Prisma schema for the workspace app.
+// Auth.js (NextAuth) owns User/Account/Session/VerificationToken; the extra
+// columns on User are what the app itself needs (role, team, billing rate).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/lib/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+/// Workspace roles, ordered most to least privileged. Scoped per membership,
+/// not per user — the same person can hold a different role in each workspace.
+enum Role {
+  OWNER
+  ADMIN
+  MANAGER
+  MEMBER
+  VIEWER
+  GUEST
+}
+
+/// A tenant. Every Team, Project, Message and ActivityEntry belongs to
+/// exactly one workspace; a User can belong to several via WorkspaceMember.
+model Workspace {
+  id          String  @id @default(cuid())
+  name        String
+  slug        String  @unique
+  description String  @default("") @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members         WorkspaceMember[]
+  teams           Team[]
+  projects        Project[]
+  activity        ActivityEntry[]
+  messages        Message[]
+  lastActiveUsers User[]            @relation("LastWorkspace")
+
+  @@index([slug])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+
+  /// bcrypt hash. Null for accounts that only sign in through OAuth.
+  passwordHash String?
+
+  /// The workspace to resume into on the next sign-in. Not the source of
+  /// truth for access — WorkspaceMember is — just a UX convenience.
+  lastWorkspaceId String?
+  teamId          String?
+  designation     String?
+  phone           String?
+  hourlyRate      Int       @default(0)
+  monthlyHours    Int       @default(160)
+  joinedAt        DateTime  @default(now())
+  lastLoginAt     DateTime?
+  disabledAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  lastWorkspace        Workspace?        @relation("LastWorkspace", fields: [lastWorkspaceId], references: [id], onDelete: SetNull)
+  workspaceMemberships WorkspaceMember[]
+  team                 Team?             @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  ledTeams             Team[]            @relation("TeamLead")
+  projects             ProjectMember[]
+  assignedTasks        TaskAssignee[]
+  timeEntries          TimeEntry[]
+  activity             ActivityEntry[]
+  sentMessages         Message[]         @relation("MessageSender")
+  receivedMessages     Message[]         @relation("MessageRecipient")
+
+  @@index([teamId])
+  @@index([lastWorkspaceId])
+}
+
+/// A user's membership — and role — in one workspace. Role lives here, not
+/// on User, so the same person can be an owner in one workspace and a guest
+/// in another.
+model WorkspaceMember {
+  workspaceId String
+  userId      String
+  role        Role     @default(MEMBER)
+  joinedAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+  @@index([userId])
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PLANNING
+  ON_HOLD
+  COMPLETED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum CampaignStatus {
+  ACTIVE
+  DRAFT
+  PAUSED
+  COMPLETED
+}
+
+enum SectionType {
+  HERO
+  FEATURES
+  CTA
+  TESTIMONIALS
+  GALLERY
+  NEWSLETTER
+  FAQ
+}
+
+model Team {
+  id          String  @id @default(cuid())
+  workspaceId String
+  name        String
+  slug        String
+  code        String
+  description String? @db.Text
+  color       String
+  leadId      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lead      User?     @relation("TeamLead", fields: [leadId], references: [id], onDelete: SetNull)
+  members   User[]
+  projects  Project[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+  @@index([leadId])
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  workspaceId String
+  name        String
+  description String        @db.Text
+  status      ProjectStatus @default(PLANNING)
+  color       String
+  /// Owning team. Deleting a team is blocked while it still owns projects.
+  /// Nullable, so `workspaceId` is stored directly rather than derived.
+  teamId      String?
+  startDate   DateTime?     @db.Date
+  endDate     DateTime?     @db.Date
+  /// Whether new tasks default to billable.
+  defaultBillable Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  team      Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  members   ProjectMember[]
+  tasks     Task[]
+  campaigns Campaign[]
+  sections  LandingSection[]
+
+  @@index([workspaceId])
+  @@index([teamId])
+}
+
+model ProjectMember {
+  projectId String
+  userId    String
+  addedAt   DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model Task {
+  id        String     @id @default(cuid())
+  projectId String
+  title     String
+  status    TaskStatus @default(TODO)
+  priority  Priority   @default(MEDIUM)
+  /// Estimate in whole minutes — durations are never fractional here.
+  estimateMinutes Int  @default(0)
+  billable  Boolean    @default(true)
+  dueDate   DateTime?  @db.Date
+  subtasksTotal Int    @default(0)
+  subtasksDone  Int    @default(0)
+  /// Manual ordering within a board column.
+  position  Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignees TaskAssignee[]
+  entries   TimeEntry[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model TaskAssignee {
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+}
+
+model TimeEntry {
+  id      String   @id @default(cuid())
+  date    DateTime @db.Date
+  userId  String
+  taskId  String
+  /// Logged time in whole minutes.
+  minutes Int
+  billable Boolean @default(true)
+  note    String   @default("") @db.Text
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([taskId])
+  @@index([date])
+}
+
+model Campaign {
+  id          String         @id @default(cuid())
+  projectId   String
+  name        String
+  description String         @db.Text
+  status      CampaignStatus @default(DRAFT)
+  progress    Int            @default(0)
+  startDate   DateTime?      @db.Date
+  endDate     DateTime?      @db.Date
+  budget      Int            @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model LandingSection {
+  id           String      @id @default(cuid())
+  projectId    String
+  type         SectionType
+  heading      String
+  subheading   String?
+  /// String array of bullet/feature copy.
+  items        Json?
+  primaryCta   String?
+  secondaryCta String?
+  position     Int         @default(0)
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  workspaceId String
+  senderId    String
+  recipientId String
+  body        String   @db.Text
+  sentAt      DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sender    User      @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient User      @relation("MessageRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([sentAt])
+}
+
+model ActivityEntry {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  action      String
+  target      String
+  at          DateTime
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([at])
+  @@index([userId])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
