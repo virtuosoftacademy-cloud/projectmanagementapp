@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  
   async redirects() {
     return [
       // Both people screens moved under /admin; keep old links working.

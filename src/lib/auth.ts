@@ -16,6 +16,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/signin", error: "/signin" },
+  // Self-hosted (not Vercel), so there's no fixed AUTH_URL — trust the
+  // incoming Host header instead of rejecting production requests outright.
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
