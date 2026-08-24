@@ -24,6 +24,20 @@ export type SectionType =
   | "newsletter"
   | "faq";
 
+/**
+ * The optional sub-pages a project can switch on. Overview is not here — it is
+ * the project itself and is always present.
+ *
+ * A key is persisted on `Project.features`, so renaming one is a migration.
+ */
+export type ProjectFeature =
+  | "tasks"
+  | "campaigns"
+  | "landing-pages"
+  | "time-tracking"
+  | "timesheet"
+  | "report";
+
 /** The minimum needed to render someone: avatar, name, link. */
 export type Person = {
   id: string;
@@ -75,6 +89,8 @@ export type Project = {
   startDate: string | null;
   endDate: string | null;
   defaultBillable: boolean;
+  /** Which optional sub-pages this project has switched on. */
+  features: ProjectFeature[];
   members: Person[];
 };
 
@@ -177,6 +193,47 @@ export const SECTION_TYPES: SectionType[] = [
 ];
 
 export const CAMPAIGN_STATUSES: CampaignStatus[] = ["draft", "active", "paused", "completed"];
+
+/**
+ * The optional sub-pages offered when configuring a project, in the order the
+ * picker lists them — which is also the order they appear under the project in
+ * the sidebar.
+ */
+export const PROJECT_FEATURES: { key: ProjectFeature; label: string; hint: string }[] = [
+  { key: "tasks", label: "Tasks", hint: "Kanban board for this project's work." },
+  { key: "campaigns", label: "Campaigns", hint: "Marketing campaigns and their budgets." },
+  {
+    key: "landing-pages",
+    label: "Landing Pages",
+    hint: "Build page sections for this project.",
+  },
+  {
+    key: "time-tracking",
+    label: "Time Tracking",
+    hint: "Log time against this project's tasks, with variance per member.",
+  },
+  {
+    key: "timesheet",
+    label: "Timesheet",
+    hint: "Week-by-week grid of hours per member.",
+  },
+  { key: "report", label: "Report", hint: "Cost, hours and status summary." },
+];
+
+/** Feature keys alone, for schema enums. */
+export const PROJECT_FEATURE_KEYS: ProjectFeature[] = PROJECT_FEATURES.map((item) => item.key);
+
+/**
+ * What a project shows when `features` has never been set. Matches the pages
+ * projects displayed before they became optional, so the column arriving does
+ * not silently hide anything.
+ */
+export const DEFAULT_PROJECT_FEATURES: ProjectFeature[] = [
+  "tasks",
+  "campaigns",
+  "timesheet",
+  "report",
+];
 
 export const DESIGNATIONS = [
   "Software Engineer",

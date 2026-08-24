@@ -21,7 +21,7 @@ export async function generateMetadata({
 }: PageProps<"/projects/project/[id]">): Promise<Metadata> {
   const { id } = await params;
   const viewer = await getSessionUser();
-  const project = viewer ? await getProject(viewer.workspaceId, id) : null;
+  const project = viewer?.workspaceId ? await getProject(viewer.workspaceId, id) : null;
   return { title: project?.name ?? "Project" };
 }
 

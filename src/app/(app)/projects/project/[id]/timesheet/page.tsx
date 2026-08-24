@@ -12,7 +12,7 @@ export async function generateMetadata({
 }: PageProps<"/projects/project/[id]/timesheet">): Promise<Metadata> {
   const { id } = await params;
   const viewer = await getSessionUser();
-  const project = viewer ? await getProject(viewer.workspaceId, id) : null;
+  const project = viewer?.workspaceId ? await getProject(viewer.workspaceId, id) : null;
   return { title: `${project?.name ?? "Project"} — Timesheet` };
 }
 
@@ -22,7 +22,8 @@ export default async function TimesheetPage({
   const viewer = await requireUser();
   const { id } = await params;
   const project = await getProject(viewer.workspaceId, id);
-  if (!project) notFound();
+  // A feature switched off is genuinely gone, not just hidden from the nav.
+  if (!project || !project.features.includes("timesheet")) notFound();
 
   const stats = await getProjectStats(viewer.workspaceId, project.id);
 

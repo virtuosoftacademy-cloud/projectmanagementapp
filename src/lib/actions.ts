@@ -21,6 +21,7 @@ import {
   firstError,
   logTimeSchema,
   moveTaskSchema,
+  projectFeaturesSchema,
   sendMessageSchema,
   updateProjectSchema,
   updateSectionSchema,
@@ -134,6 +135,29 @@ export async function addProjectMembersAction(
   });
 
   refreshProject(projectId);
+  return { ok: true };
+}
+
+/** Switch a project's optional sub-pages on or off. */
+export async function updateProjectFeaturesAction(input: unknown): Promise<ActionResult> {
+  const user = await requirePermission("projects.edit");
+
+  const parsed = projectFeaturesSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const existing = await prisma.project.findFirst({
+    where: { id: data.projectId, workspaceId: user.workspaceId },
+    select: { id: true },
+  });
+  if (!existing) return NOT_FOUND;
+
+  await prisma.project.update({
+    where: { id: data.projectId },
+    data: { features: data.features },
+  });
+
+  refreshProject(data.projectId);
   return { ok: true };
 }
 

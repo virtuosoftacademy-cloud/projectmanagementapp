@@ -177,6 +177,10 @@ model Project {
   endDate     DateTime?     @db.Date
   /// Whether new tasks default to billable.
   defaultBillable Boolean   @default(true)
+  /// Enabled sub-pages, as a string array of ProjectFeature keys. Null means
+  /// "never configured" — the app falls back to DEFAULT_PROJECT_FEATURES, so
+  /// projects that predate this column keep the pages they already showed.
+  features        Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

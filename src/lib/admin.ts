@@ -10,7 +10,10 @@ export type AdminUser = {
   name: string;
   email: string;
   phone: string | null;
-  role: Role;
+  /** Their role *in the viewing workspace*, or null when they are not in it. */
+  role: Role | null;
+  /** False for accounts that exist but hold no membership in this workspace. */
+  inWorkspace: boolean;
   designation: string | null;
   teamId: string | null;
   hourlyRate: number;
@@ -27,51 +30,68 @@ export type UserStats = {
   total: number;
   active: number;
   inactive: number;
+  /** How many of `total` actually hold a membership in the viewing workspace. */
+  inWorkspace: number;
   byRole: Record<Role, number>;
 };
 
-/** Every account in `workspaceId`, with the counts the admin screens need. */
+/**
+ * Every account in the system, annotated with its role in `workspaceId`.
+ *
+ * Deliberately **not** workspace-scoped: the admin Users screen is a directory
+ * of all accounts, so people who belong to another workspace still appear —
+ * with `role: null` and `inWorkspace: false`, never with a borrowed role.
+ *
+ * The management actions stay scoped: `setUserRoleAction`, `deleteUserAction`
+ * and `setUsersDisabledAction` all look the target up by
+ * `workspaceId_userId` and refuse anyone who is not a member, so listing an
+ * outsider here does not make them administrable from here.
+ */
 export const getAdminUsers = cache(async (workspaceId: string): Promise<AdminUser[]> => {
-  const rows = await prisma.workspaceMember.findMany({
-    where: { workspaceId },
-    orderBy: [{ role: "asc" }, { user: { name: "asc" } }],
+  const users = await prisma.user.findMany({
+    orderBy: { name: "asc" },
     include: {
-      user: {
-        include: {
-          _count: { select: { assignedTasks: true, timeEntries: true } },
-        },
-      },
+      _count: { select: { assignedTasks: true, timeEntries: true } },
+      workspaceMemberships: { where: { workspaceId }, select: { role: true, joinedAt: true } },
     },
   });
 
-  return rows.map((row) => ({
-    id: row.user.id,
-    name: row.user.name,
-    email: row.user.email,
-    phone: row.user.phone,
-    role: roleToDomain[row.role],
-    designation: row.user.designation,
-    teamId: row.user.teamId,
-    hourlyRate: row.user.hourlyRate,
-    monthlyHours: row.user.monthlyHours,
-    joinedAt: row.joinedAt.toISOString().slice(0, 10),
-    lastLoginAt: row.user.lastLoginAt ? row.user.lastLoginAt.toISOString().slice(0, 10) : null,
-    active: row.user.disabledAt === null,
-    taskCount: row.user._count.assignedTasks,
-    entryCount: row.user._count.timeEntries,
-  }));
+  return users.map((user) => {
+    const membership = user.workspaceMemberships[0];
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: membership ? roleToDomain[membership.role] : null,
+      inWorkspace: Boolean(membership),
+      designation: user.designation,
+      teamId: user.teamId,
+      hourlyRate: user.hourlyRate,
+      monthlyHours: user.monthlyHours,
+      // Joined *this workspace* when they are in it; otherwise when the account
+      // itself was created, which is the only join date that means anything.
+      joinedAt: (membership?.joinedAt ?? user.joinedAt).toISOString().slice(0, 10),
+      lastLoginAt: user.lastLoginAt ? user.lastLoginAt.toISOString().slice(0, 10) : null,
+      active: user.disabledAt === null,
+      taskCount: user._count.assignedTasks,
+      entryCount: user._count.timeEntries,
+    };
+  });
 });
 
 export const getUserStats = cache(async (workspaceId: string): Promise<UserStats> => {
   const users = await getAdminUsers(workspaceId);
 
   const byRole = Object.fromEntries(ROLES.map((role) => [role, 0])) as Record<Role, number>;
-  for (const user of users) byRole[user.role] += 1;
+  for (const user of users) if (user.role) byRole[user.role] += 1;
 
   return {
     total: users.length,
     active: users.filter((user) => user.active).length,
     inactive: users.filter((user) => !user.active).length,
+    inWorkspace: users.filter((user) => user.inWorkspace).length,
     byRole,
   };
 });

@@ -41,8 +41,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!user || !user.passwordHash || !ok || user.disabledAt) return null;
 
         // Resume into the workspace this user left off in, if they're still a
-        // member of it; otherwise their earliest membership. No membership at
-        // all means there's nothing for them to sign into.
+        // member of it; otherwise their earliest membership.
+        //
+        // No membership is NOT a failed sign-in: the credentials were correct,
+        // the account simply has nowhere to land yet. Rejecting here used to
+        // report "that email and password did not match", which was untrue, and
+        // made the first workspace impossible to create through the UI.
+        // `requireUser` sends these sessions to /onboarding instead.
         const membership =
           (user.lastWorkspaceId &&
             (await prisma.workspaceMember.findUnique({
@@ -52,8 +57,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             where: { userId: user.id },
             orderBy: { joinedAt: "asc" },
           }));
-
-        if (!membership) return null;
 
         await prisma.user.update({
           where: { id: user.id },
@@ -65,8 +68,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           name: user.name,
           email: user.email,
           image: user.image,
-          workspaceId: membership.workspaceId,
-          role: membership.role,
+          workspaceId: membership?.workspaceId ?? null,
+          role: membership?.role ?? null,
         };
       },
     }),
@@ -75,8 +78,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id as string;
-        token.workspaceId = (user as { workspaceId?: string }).workspaceId;
-        token.role = (user as { role?: Role }).role ?? "MEMBER";
+        // Both stay null for an account with no workspace yet — defaulting the
+        // role to MEMBER here would hand out permissions nobody granted.
+        token.workspaceId = (user as { workspaceId?: string | null }).workspaceId ?? null;
+        token.role = (user as { role?: Role | null }).role ?? null;
       }
 
       if (trigger === "update" && token.id) {
@@ -120,8 +125,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.workspaceId = token.workspaceId as string;
-        session.user.role = (token.role as Role) ?? "MEMBER";
+        session.user.workspaceId = (token.workspaceId as string | null) ?? null;
+        session.user.role = (token.role as Role | null) ?? null;
       }
       return session;
     },

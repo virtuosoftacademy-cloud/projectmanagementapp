@@ -26,7 +26,9 @@ export async function listMembers(): Promise<WorkspaceMember[]> {
   // Callers are all behind requireUser/requirePermission; this guard is a
   // backstop so the query can never run for an anonymous request.
   const viewer = await getSessionUser();
-  if (!viewer) return [];
+  // No session, or a session that hasn't picked a workspace yet — either way
+  // there is no roster to read.
+  if (!viewer?.workspaceId) return [];
 
   const rows = await prisma.workspaceMember.findMany({
     where: { workspaceId: viewer.workspaceId },

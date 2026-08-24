@@ -28,10 +28,11 @@ import { FormDialog } from "@/components/ui/form-dialog";
 import { DialogActions } from "@/components/ui/form-actions";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ProjectFeaturesDialog } from "@/components/projects/project-features-dialog";
 import { visibleSections, type NavItem } from "@/components/navigation";
 import type { Project, WorkspaceSummary } from "@/lib/domain";
 import { roleLabel } from "@/lib/permissions";
-import type { SessionUser } from "@/lib/session";
+import type { ActiveSessionUser } from "@/lib/session";
 import { createWorkspaceAction } from "@/lib/workspace-actions";
 import { cn } from "@/lib/utils";
 
@@ -51,8 +52,8 @@ export function AppSidebar({
   collapsible = true,
   onNavigate,
 }: {
-  user: SessionUser;
-  projects: Pick<Project, "id" | "name">[];
+  user: ActiveSessionUser;
+  projects: Pick<Project, "id" | "name" | "features">[];
   teamCount: number;
   workspaces: WorkspaceSummary[];
   /** Counts keyed by href, e.g. overdue tasks on /projects/tasks. */
@@ -68,6 +69,8 @@ export function AppSidebar({
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [switching, setSwitching] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  /** Which project's feature picker is open, by id. */
+  const [configuringProjectId, setConfiguringProjectId] = useState<string | null>(null);
   const [draft, setDraft] = useState({ name: "", slug: "" });
   const [slugTouched, setSlugTouched] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -75,6 +78,7 @@ export function AppSidebar({
 
   const collapsed = collapsible && isCollapsed;
   const currentWorkspace = workspaces.find((workspace) => workspace.id === user.workspaceId);
+  const configuringProject = projects.find((project) => project.id === configuringProjectId);
 
   async function switchWorkspace(workspaceId: string) {
     if (workspaceId === user.workspaceId || switching) return;
@@ -119,82 +123,101 @@ export function AppSidebar({
     const isChildActive = isActive && level > 0;
     const isExpanded = expandedItems.includes(item.href) || hasActiveChild;
 
+    // A project row trades the expand chevron for a "＋" that opens its feature
+    // picker. The button has to sit outside the Link — nesting it would be
+    // invalid HTML and its click would also toggle the expand.
+    const isProjectRow = Boolean(item.projectId) && !collapsed;
+
     return (
       <div key={`${item.href}-${item.title}`}>
-        <Link
-          href={hasChildren ? "#" : item.href}
-          onClick={(event) => {
-            if (hasChildren) {
-              event.preventDefault();
-              toggleExpanded(item.href);
-            } else {
-              onNavigate?.();
-            }
-          }}
-          aria-current={isActive && !hasChildren ? "page" : undefined}
-          aria-expanded={hasChildren ? isExpanded : undefined}
-          title={collapsed ? item.title : undefined}
-          className={cn(
-            "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-            "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
-            isActive &&
-              level === 0 &&
-              "border border-primary/20 bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-sm",
-            isParentActive && "border border-primary/10 bg-primary/10 text-primary",
-            isChildActive && "ml-6 border-l-2 border-primary/30 bg-primary/5 text-primary",
-            level > 0 && "relative ml-8 py-1.5 text-xs",
-            collapsed && "justify-center px-2",
-          )}
-        >
-          {/* Tree connector for child items */}
-          {level > 0 && !collapsed ? (
-            <span className="absolute -left-3 top-1/2 h-px w-3 bg-sidebar-border" />
-          ) : null}
-
-          {/* Active rail on a selected top-level item */}
-          {isActive && level === 0 ? (
-            <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-primary to-primary/60 shadow-sm" />
-          ) : null}
-
-          <item.icon
+        <div className="flex items-center">
+          <Link
+            href={hasChildren ? "#" : item.href}
+            onClick={(event) => {
+              if (hasChildren) {
+                event.preventDefault();
+                toggleExpanded(item.href);
+              } else {
+                onNavigate?.();
+              }
+            }}
+            aria-current={isActive && !hasChildren ? "page" : undefined}
+            aria-expanded={hasChildren ? isExpanded : undefined}
+            title={collapsed ? item.title : undefined}
             className={cn(
-              "shrink-0 transition-colors",
-              collapsed ? "h-5 w-5" : "h-4 w-4",
-              isActive || isParentActive ? "text-primary" : "text-sidebar-foreground/70",
+              "group relative flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
+              "hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              isActive &&
+                level === 0 &&
+                "border border-primary/20 bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-sm",
+              isParentActive && "border border-primary/10 bg-primary/10 text-primary",
+              isChildActive && "ml-6 border-l-2 border-primary/30 bg-primary/5 text-primary",
+              level > 0 && "relative ml-8 py-1.5 text-xs",
+              collapsed && "justify-center px-2",
             )}
-          />
+          >
+            {/* Tree connector for child items */}
+            {level > 0 && !collapsed ? (
+              <span className="absolute -left-3 top-1/2 h-px w-3 bg-sidebar-border" />
+            ) : null}
 
-          {!collapsed ? (
-            <>
-              <span
-                className={cn(
-                  "flex-1 truncate font-medium",
-                  isActive || isParentActive
-                    ? "text-primary"
-                    : "text-sidebar-foreground",
-                )}
-              >
-                {item.title}
-              </span>
+            {/* Active rail on a selected top-level item */}
+            {isActive && level === 0 ? (
+              <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-primary to-primary/60 shadow-sm" />
+            ) : null}
 
-              {item.badge ? (
-                <span className="inline-flex items-center justify-center rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 font-mono text-xs font-medium text-primary">
-                  {item.badge}
-                </span>
-              ) : null}
+            <item.icon
+              className={cn(
+                "shrink-0 transition-colors",
+                collapsed ? "h-5 w-5" : "h-4 w-4",
+                isActive || isParentActive ? "text-primary" : "text-sidebar-foreground/70",
+              )}
+            />
 
-              {hasChildren ? (
-                <ChevronRight
+            {!collapsed ? (
+              <>
+                <span
                   className={cn(
-                    "h-4 w-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200",
-                    isExpanded && "rotate-90",
+                    "flex-1 truncate font-medium",
+                    isActive || isParentActive
+                      ? "text-primary"
+                      : "text-sidebar-foreground",
                   )}
-                />
-              ) : null}
-            </>
+                >
+                  {item.title}
+                </span>
+
+                {item.badge ? (
+                  <span className="inline-flex items-center justify-center rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 font-mono text-xs font-medium text-primary">
+                    {item.badge}
+                  </span>
+                ) : null}
+
+                {hasChildren && !isProjectRow ? (
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 shrink-0 text-sidebar-foreground/50 transition-transform duration-200",
+                      isExpanded && "rotate-90",
+                    )}
+                  />
+                ) : null}
+              </>
+            ) : null}
+          </Link>
+
+          {isProjectRow && item.projectId ? (
+            <button
+              type="button"
+              onClick={() => setConfiguringProjectId(item.projectId!)}
+              aria-label={`Choose features for ${item.title}`}
+              title="Add or remove pages"
+              className="shrink-0 rounded-md p-1.5 text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           ) : null}
-        </Link>
+        </div>
 
         {hasChildren && isExpanded && !collapsed && children ? (
           <div className="relative mt-1 space-y-0.5">
@@ -417,6 +440,13 @@ export function AppSidebar({
           </div>
         )}
       </div>
+
+      {/* Keyed so reopening for a different project resets the checkboxes. */}
+      <ProjectFeaturesDialog
+        key={configuringProject?.id ?? "closed"}
+        project={configuringProject ?? null}
+        onClose={() => setConfiguringProjectId(null)}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { requireUser } from "@/lib/session";
+import { requireAccount } from "@/lib/session";
 import { createWorkspaceSchema, firstError } from "@/lib/validations";
 
 export type CreateWorkspaceResult = { ok: boolean; error?: string; workspaceId?: string };
@@ -11,9 +11,13 @@ export type CreateWorkspaceResult = { ok: boolean; error?: string; workspaceId?:
  * else gated by `requirePermission()`, there's no existing workspace role to
  * check yet, since the workspace doesn't exist until this runs. The creator
  * becomes its owner.
+ *
+ * Gated on `requireAccount`, not `requireUser`: this is the action onboarding
+ * calls, and `requireUser` would redirect a workspace-less caller straight back
+ * to onboarding — a loop that makes the first workspace uncreatable.
  */
 export async function createWorkspaceAction(input: unknown): Promise<CreateWorkspaceResult> {
-  const user = await requireUser();
+  const user = await requireAccount();
 
   const parsed = createWorkspaceSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };

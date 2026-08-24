@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import {
+  DEFAULT_PROJECT_FEATURES,
   TASK_STATUSES,
   TODAY,
   formatDay,
@@ -15,6 +16,7 @@ import {
   type Message,
   type Person,
   type Project,
+  type ProjectFeature,
   type Task,
   type TaskStatus,
   type Team,
@@ -134,6 +136,11 @@ export const getProjects = cache(async (workspaceId: string): Promise<Project[]>
     startDate: dateToIso(project.startDate),
     endDate: dateToIso(project.endDate),
     defaultBillable: project.defaultBillable,
+    // Null means the project predates the column, so it keeps the pages it
+    // already showed rather than losing them all at once.
+    features: Array.isArray(project.features)
+      ? (project.features as ProjectFeature[])
+      : DEFAULT_PROJECT_FEATURES,
     members: project.members.map((link) => link.user as Person),
   }));
 });

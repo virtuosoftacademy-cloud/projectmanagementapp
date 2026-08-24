@@ -1,5 +1,6 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "@/lib/generated/prisma/client";
+import { buildDatabaseUrl } from "./db-config/db-config";
 
 /**
  * Prisma 7 requires a driver adapter. `@prisma/adapter-mariadb` speaks the
@@ -11,7 +12,7 @@ import { PrismaClient } from "@/lib/generated/prisma/client";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient() {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = buildDatabaseUrl();
   if (!connectionString) {
     throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
   }

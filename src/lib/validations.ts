@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   CAMPAIGN_STATUSES,
   PRIORITIES,
+  PROJECT_FEATURE_KEYS,
   PROJECT_STATUSES,
   SECTION_TYPES,
   TASK_STATUS_VALUES,
@@ -199,6 +200,12 @@ export const updateProjectSchema = z.object({
 export const addProjectMembersSchema = z.object({
   projectId: z.string().min(1),
   userIds: z.array(z.string().min(1)).min(1, "Pick at least one person."),
+});
+
+/** An empty list is valid — a project may switch every optional page off. */
+export const projectFeaturesSchema = z.object({
+  projectId: z.string().min(1),
+  features: z.array(z.enum(PROJECT_FEATURE_KEYS as [string, ...string[]])),
 });
 
 // ============================================================================

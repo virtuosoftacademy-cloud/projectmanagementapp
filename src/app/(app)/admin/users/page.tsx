@@ -39,7 +39,7 @@ export default async function AdminUsersPage() {
           tone="primary"
           value={stats.total.toString()}
           label="Total Users"
-          hint={`${teams.length} teams`}
+          hint={`${stats.inWorkspace} in this workspace`}
         />
         <KpiCard
           icon={UserCheck}

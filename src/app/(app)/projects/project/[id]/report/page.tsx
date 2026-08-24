@@ -17,7 +17,7 @@ export async function generateMetadata({
 }: PageProps<"/projects/project/[id]/report">): Promise<Metadata> {
   const { id } = await params;
   const viewer = await getSessionUser();
-  const project = viewer ? await getProject(viewer.workspaceId, id) : null;
+  const project = viewer?.workspaceId ? await getProject(viewer.workspaceId, id) : null;
   return { title: `${project?.name ?? "Project"} — Report` };
 }
 
@@ -28,7 +28,8 @@ export default async function ReportPage({
 
   const { id } = await params;
   const project = await getProject(viewer.workspaceId, id);
-  if (!project) notFound();
+  // A feature switched off is genuinely gone, not just hidden from the nav.
+  if (!project || !project.features.includes("report")) notFound();
 
   const [stats, members] = await Promise.all([
     getProjectStats(viewer.workspaceId, project.id),

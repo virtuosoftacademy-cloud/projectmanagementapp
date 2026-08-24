@@ -35,7 +35,8 @@ export default async function ForbiddenPage({ searchParams }: PageProps<"/forbid
               {user ? (
                 <>
                   {" "}
-                  You&apos;re signed in as {user.name} ({roleLabel(user.role)}).
+                  You&apos;re signed in as {user.name}
+                  {user.role ? ` (${roleLabel(user.role)})` : ""}.
                 </>
               ) : null}
             </p>

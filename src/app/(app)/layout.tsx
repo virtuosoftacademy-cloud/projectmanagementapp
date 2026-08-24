@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <SessionProvider>
       <AppShell
         user={user}
-        projects={projects.map(({ id, name }) => ({ id, name }))}
+        projects={projects.map(({ id, name, features }) => ({ id, name, features }))}
         teamCount={teams.length}
         workspaces={workspaces}
         // Sidebar count badges, resolved server-side rather than polled.

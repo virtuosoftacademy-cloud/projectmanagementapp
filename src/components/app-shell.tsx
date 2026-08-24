@@ -7,7 +7,7 @@ import { MobileNavigation } from "@/components/layout/mobile-navigation";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-media-query";
 import type { Project, WorkspaceSummary } from "@/lib/domain";
-import type { SessionUser } from "@/lib/session";
+import type { ActiveSessionUser } from "@/lib/session";
 
 /**
  * Two-column app shell. The sidebar is pinned on large screens and manages its
@@ -21,8 +21,8 @@ export function AppShell({
   badges,
   children,
 }: {
-  user: SessionUser;
-  projects: Pick<Project, "id" | "name">[];
+  user: ActiveSessionUser;
+  projects: Pick<Project, "id" | "name" | "features">[];
   teamCount: number;
   workspaces: WorkspaceSummary[];
   badges?: Record<string, number>;

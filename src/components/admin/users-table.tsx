@@ -253,7 +253,9 @@ export function UsersTable({
                         <input
                           type="checkbox"
                           checked={selected.includes(user.id)}
-                          disabled={user.id === currentUserId}
+                          // Bulk enable/disable only acts on members of this
+                          // workspace, so an outsider cannot be selected.
+                          disabled={user.id === currentUserId || !user.inWorkspace}
                           aria-label={`Select ${user.name}`}
                           onChange={() =>
                             setSelected((current) =>
@@ -289,7 +291,14 @@ export function UsersTable({
                     </td>
 
                     <td className="px-3 py-2">
-                      {canManageRoles ? (
+                      {/* Someone outside this workspace has no role here, and the
+                          role action would refuse them anyway — so say so rather
+                          than offering a control that cannot work. */}
+                      {!user.role ? (
+                        <Badge variant="muted" title="This account belongs to another workspace">
+                          Not a member
+                        </Badge>
+                      ) : canManageRoles ? (
                         <SelectField
                           aria-label={`Role for ${user.name}`}
                           value={user.role}
@@ -323,7 +332,7 @@ export function UsersTable({
 
                     {canManageRoles ? (
                       <td className="whitespace-nowrap px-3 py-2 text-right">
-                        {user.id !== currentUserId ? (
+                        {user.id !== currentUserId && user.inWorkspace ? (
                           <Button
                             variant="ghost"
                             size="icon"

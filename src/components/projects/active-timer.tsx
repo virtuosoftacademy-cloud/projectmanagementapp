@@ -1,16 +1,30 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Pause, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { logTimeAction } from "@/lib/actions";
+import { TODAY } from "@/lib/domain";
 
 function format(seconds: number) {
   const parts = [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60];
   return parts.map((part) => part.toString().padStart(2, "0")).join(":");
 }
 
-/** Stopwatch for the current user. Local to the session — nothing is persisted. */
+/**
+ * Stopwatch for the current user.
+ *
+ * Stopping writes a real time entry through `logTimeAction` — the same action
+ * the manual "Log Time" dialog uses, so a tracked session and a typed one land
+ * identically. It used to just zero the counter, which meant the timer looked
+ * like it worked and silently threw the time away.
+ *
+ * Entries are dated `TODAY` to match the manual dialog's default: this app runs
+ * on a fixed demo clock, and using the real wall date would file tracked time
+ * outside the week every other screen displays.
+ */
 export function ActiveTimer({
   userName,
   tasks,
@@ -18,9 +32,12 @@ export function ActiveTimer({
   userName: string;
   tasks: { id: string; label: string }[];
 }) {
+  const router = useRouter();
   const [taskId, setTaskId] = useState("");
   const [running, setRunning] = useState(false);
   const [seconds, setSeconds] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saving, startSaving] = useTransition();
   const interval = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -33,7 +50,36 @@ export function ActiveTimer({
 
   function stop() {
     setRunning(false);
-    setSeconds(0);
+
+    // The schema's floor is one minute, so anything shorter has nothing
+    // meaningful to record — say so rather than failing validation.
+    const minutes = Math.round(seconds / 60);
+    if (!taskId || minutes < 1) {
+      setSeconds(0);
+      setNotice(
+        minutes < 1 && seconds > 0 ? "Under a minute — nothing logged." : null,
+      );
+      return;
+    }
+
+    startSaving(async () => {
+      const result = await logTimeAction({
+        taskId,
+        minutes,
+        date: TODAY,
+        note: "Tracked with the timer",
+      });
+
+      if (!result.ok) {
+        // Keep the elapsed time on screen so a failure does not lose the work.
+        setNotice(result.error ?? "Could not save that time.");
+        return;
+      }
+
+      setSeconds(0);
+      setNotice(`Logged ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`);
+      router.refresh();
+    });
   }
 
   return (
@@ -65,17 +111,23 @@ export function ActiveTimer({
         <div className="flex items-center justify-center gap-2">
           <Button
             size="sm"
-            disabled={!taskId}
+            disabled={!taskId || saving}
             onClick={() => setRunning((value) => !value)}
           >
             {running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
             {running ? "Pause" : "Start"}
           </Button>
-          <Button variant="outline" size="sm" disabled={!seconds} onClick={stop}>
+          <Button variant="outline" size="sm" disabled={!seconds || saving} onClick={stop}>
             <Square className="h-4 w-4" />
-            Stop
+            {saving ? "Saving…" : "Stop & log"}
           </Button>
         </div>
+
+        {notice ? (
+          <p role="status" className="text-center text-xs text-muted-foreground">
+            {notice}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );
