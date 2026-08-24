@@ -12,10 +12,11 @@ import { buildDatabaseUrl } from "./db-config/db-config";
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 function createClient() {
+  // buildDatabaseUrl() is the single source of truth for connection settings:
+  // it resolves DB_* first, falls back to DATABASE_URL, and throws with an
+  // actionable message when neither is configured — so there is no falsy
+  // result to guard against here.
   const connectionString = buildDatabaseUrl();
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
-  }
 
   // The adapter takes either a connection URL or a mariadb PoolConfig.
   return new PrismaClient({

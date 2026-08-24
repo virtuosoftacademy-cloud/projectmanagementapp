@@ -4,18 +4,8 @@ import { PrismaMariaDb } from "@prisma/adapter-mariadb";
 import { PrismaClient } from "../src/lib/generated/prisma/client";
 import type { Prisma } from "../src/lib/generated/prisma/client";
 import * as data from "./seed-data";
+import { buildDatabaseUrl } from "../src/lib/db-config/db-config";
 
-/**
- * Seeds two demo workspaces: teams, accounts (and their per-workspace
- * memberships/roles), projects, tasks, time entries, campaigns, landing
- * sections, activity and messages.
- *
- * Idempotent — natural keys (workspace slug, team slug, user email, project
- * name, task title) are matched on re-run, and existing password hashes are
- * never overwritten.
- *
- * Run with: npm run db:seed
- */
 function isoDate(value: string | null | undefined) {
   if (!value) return null;
   const [year, month, day] = value.split("-").map(Number);
@@ -23,8 +13,11 @@ function isoDate(value: string | null | undefined) {
 }
 
 async function main() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) throw new Error("DATABASE_URL is not set.");
+  // The same resolver the app and the Prisma CLI use, so the seed always lands
+  // in the database the rest of the project is pointed at: discrete DB_* vars
+  // first, DATABASE_URL only as a fallback. Reading DATABASE_URL directly meant
+  // the seed broke the moment .env moved over to DB_HOST/DB_NAME/...
+  const connectionString = buildDatabaseUrl();
 
   const password = process.env.SEED_PASSWORD;
   if (!password || password.length < 8) {

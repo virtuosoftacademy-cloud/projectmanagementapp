@@ -1,17 +1,3 @@
-/**
- * Seed content for the demo workspaces.
- *
- * Rows reference each other by stable natural keys (email for people, a `key`
- * for projects and tasks, a `slug` for teams and workspaces) rather than
- * database ids, so the seeder can run repeatedly and the real cuids stay
- * opaque.
- *
- * Two workspaces are seeded — `acme` and `globex` — so the workspace switcher
- * has something real to demonstrate. Alex belongs to both (owner of one,
- * admin of the other); everyone else belongs to just the one their team sits
- * in, and every project/task/time-entry reference below only names people who
- * are actually members of that record's workspace.
- */
 
 export const workspaces = [
   { slug: "acme", name: "Acme Corp", description: "Main workspace for all projects" },

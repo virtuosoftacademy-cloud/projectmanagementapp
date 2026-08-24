@@ -80,6 +80,7 @@ CREATE TABLE `Project` (
     `startDate` DATE NULL,
     `endDate` DATE NULL,
     `defaultBillable` BOOLEAN NOT NULL DEFAULT true,
+    `features` JSON NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
 
