@@ -7,7 +7,7 @@
     "build": "npm run db:sync && npm run db:seed && next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate && prisma migrate reset",
+    "postinstall": "prisma generate && prisma migrate reset --force",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
