@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { Bell, PanelLeft } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { GlobalTimerIndicator } from "@/components/projects/global-timer-indicator";
 import { MobileNavigation } from "@/components/layout/mobile-navigation";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-media-query";
-import type { Project, WorkspaceSummary } from "@/lib/domain";
+import type { Project, RunningTimer, WorkspaceSummary } from "@/lib/domain";
+import type { AppPage } from "@/lib/permissions";
 import type { ActiveSessionUser } from "@/lib/session";
 
 /**
@@ -18,14 +20,24 @@ export function AppShell({
   projects,
   teamCount,
   workspaces,
+  pages,
+  canCreateWorkspace,
+  canManageFeatures,
   badges,
+  runningTimer,
   children,
 }: {
   user: ActiveSessionUser;
   projects: Pick<Project, "id" | "name" | "features">[];
   teamCount: number;
   workspaces: WorkspaceSummary[];
+  /** Pages this member may reach; see `resolvePages`. */
+  pages: AppPage[];
+  canCreateWorkspace: boolean;
+  canManageFeatures: boolean;
   badges?: Record<string, number>;
+  /** The viewer's running timer, shown in the header on every page. */
+  runningTimer: RunningTimer | null;
   children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
@@ -40,6 +52,9 @@ export function AppShell({
             projects={projects}
             teamCount={teamCount}
             workspaces={workspaces}
+            pages={pages}
+            canCreateWorkspace={canCreateWorkspace}
+            canManageFeatures={canManageFeatures}
             badges={badges}
           />
         </div>
@@ -59,6 +74,9 @@ export function AppShell({
               projects={projects}
               teamCount={teamCount}
               workspaces={workspaces}
+              pages={pages}
+              canCreateWorkspace={canCreateWorkspace}
+              canManageFeatures={canManageFeatures}
               badges={badges}
               collapsible={false}
               onNavigate={() => setMobileOpen(false)}
@@ -80,9 +98,12 @@ export function AppShell({
             <PanelLeft className="h-4 w-4" />
             <span className="sr-only">Toggle Sidebar</span>
           </Button>
-          <Button variant="ghost" size="icon" aria-label="Notifications">
-            <Bell className="h-4 w-4" />
-          </Button>
+          <div className="flex min-w-0 items-center gap-2">
+            <GlobalTimerIndicator running={runningTimer} />
+            <Button variant="ghost" size="icon" aria-label="Notifications">
+              <Bell className="h-4 w-4" />
+            </Button>
+          </div>
         </header>
 
         <main className="flex-1 p-6">{children}</main>

@@ -16,7 +16,7 @@ import {
   SECTION_TYPES,
   TASK_STATUS_VALUES,
 } from "@/lib/domain";
-import { ROLES } from "@/lib/permissions";
+import { APP_PAGE_KEYS, PERMISSION_KEYS, ROLES, isFixedRole } from "@/lib/permissions";
 
 // ============================================================================
 // SHARED FIELDS
@@ -92,7 +92,9 @@ export const createUserSchema = z
     phone: phoneSchema,
     role: roleSchema,
     designation: z.string().trim().max(60).default(""),
-    hourlyRate: z.coerce.number().int().min(0, "Rate cannot be negative.").max(1_000_000),
+    /// Empty means "no team". Whether the id names a team in *this* workspace
+    /// is checked in the action — zod cannot reach the database.
+    teamId: z.string().trim().default(""),
     monthlyHours: z.coerce.number().int().min(0).max(744, "That is more hours than a month has."),
     active: z.boolean(),
   })
@@ -108,6 +110,9 @@ export const inviteMemberSchema = z.object({
   name: nameSchema("Name"),
   email: emailSchema,
   role: roleSchema,
+  /// Optional, and only offered by callers that have a team list to show — the
+  /// settings card posts no `teamId` at all, which lands here as "".
+  teamId: z.string().trim().default(""),
   password: z
     .string()
     .refine(
@@ -124,6 +129,48 @@ export const updateRoleSchema = z.object({
 export const setDisabledSchema = z.object({
   userIds: z.array(z.string().min(1)).min(1, "Select at least one account."),
   disabled: z.boolean(),
+});
+
+/**
+ * A role an owner or admin defines.
+ *
+ * `inheritsFrom` is required, not optional with a default: it is what every
+ * role-based guard reads, and a role that silently fell back to the least
+ * privileged base would look correct in the UI while refusing its holder
+ * everywhere.
+ */
+export const customRoleSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .min(1, "Give the role a name.")
+    .max(40)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens.")
+    // Only the fixed roles are reserved. Manager, Member, Viewer and Guest are
+    // themselves seeded as editable roles, so those names are legitimately in
+    // use here and must stay available.
+    .refine((value) => !isFixedRole(value), "That name belongs to a fixed role."),
+  label: z.string().trim().min(1, "Give the role a label.").max(60),
+  description: z.string().trim().max(500).default(""),
+  inheritsFrom: roleSchema,
+  permissions: z.array(z.enum(PERMISSION_KEYS as [string, ...string[]])),
+});
+
+/** Assign which pages a member may reach. */
+export const setUserPagesSchema = z.object({
+  userId: z.string().min(1, "Pick a member."),
+  /// Unknown keys are rejected rather than ignored, so a stale client cannot
+  /// quietly write junk into the column that `resolvePages` then has to skip.
+  pages: z.array(z.enum(APP_PAGE_KEYS as [string, ...string[]])),
+});
+
+/** Add an account that already exists to the caller's workspace. */
+export const addMemberSchema = z.object({
+  userId: z.string().min(1, "Pick someone to add."),
+  role: roleSchema,
+  /// Empty means "leave their team as it is" — see `addMemberAction`.
+  teamId: z.string().trim().default(""),
 });
 
 // ============================================================================
@@ -228,9 +275,52 @@ export const moveTaskSchema = z.object({
   status: z.enum(TASK_STATUS_VALUES as [string, ...string[]]),
 });
 
+/**
+ * Editing an existing task.
+ *
+ * Deliberately the same field set as creation minus `projectId`: a task does
+ * not move between projects here, because its time entries, attachments and
+ * board position all belong to the project it was created in.
+ */
+export const updateTaskSchema = z.object({
+  taskId: z.string().min(1),
+  title: z.string().trim().min(1, "Give the task a title.").max(200),
+  description: z.string().trim().max(5000).default(""),
+  status: z.enum(TASK_STATUS_VALUES as [string, ...string[]]),
+  priority: z.enum(PRIORITIES as [string, ...string[]]),
+  assigneeIds: z.array(z.string().min(1)).default([]),
+  labelIds: z.array(z.string().min(1)).default([]),
+  estimateHours: z.coerce.number().min(0).max(10_000),
+  billable: z.boolean(),
+  dueDate: isoDateSchema,
+});
+
+export const archiveTaskSchema = z.object({
+  taskId: z.string().min(1),
+  /** False restores it to the board. */
+  archived: z.boolean(),
+});
+
+// ============================================================================
+// LABELS
+// ============================================================================
+
+export const labelSchema = z.object({
+  name: z.string().trim().min(1, "Give the label a name.").max(40),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, "Pick a colour."),
+});
+
+export const updateLabelSchema = labelSchema.extend({ id: z.string().min(1) });
+
 // ============================================================================
 // TIME TRACKING
 // ============================================================================
+
+/** Nothing sensible is longer than a day, whether typed or timed. */
+export const MAX_ENTRY_MINUTES = 24 * 60;
 
 export const logTimeSchema = z.object({
   taskId: z.string().min(1, "Pick a task."),
@@ -238,10 +328,109 @@ export const logTimeSchema = z.object({
     .number()
     .int("Log whole minutes.")
     .min(1, "Log at least one minute.")
-    .max(24 * 60, "That is more than a day."),
+    .max(MAX_ENTRY_MINUTES, "That is more than a day."),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date."),
   note: z.string().trim().max(500).default(""),
 });
+
+/** A blank optional field arrives as `""` from a form; treat it as absent. */
+const optionalDateTime = z.preprocess(
+  (value) => (value === "" || value === null ? undefined : value),
+  z.iso.datetime({ offset: true }).optional(),
+);
+
+/**
+ * The fields a manual time entry can be given, before the cross-field rules.
+ *
+ * Two ways to say the same thing: a duration on a day, or a start and an end.
+ * Both are offered because both are how people actually remember work — "about
+ * an hour yesterday" and "09:15 until 10:40" — and the second additionally
+ * records *when*, which the first cannot.
+ */
+const timeEntryFields = {
+  durationMinutes: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.coerce
+      .number()
+      .int("Log whole minutes.")
+      .min(1, "Log at least one minute.")
+      .max(MAX_ENTRY_MINUTES, "That is more than a day.")
+      .optional(),
+  ),
+  /** The day a duration-only entry belongs to; ignored when times are given. */
+  date: isoDateSchema,
+  startedAt: optionalDateTime,
+  endedAt: optionalDateTime,
+  note: z.string().trim().max(500).default(""),
+};
+
+type TimeEntryShape = {
+  durationMinutes?: number;
+  startedAt?: string;
+  endedAt?: string;
+};
+
+/**
+ * The rules that span more than one field, applied identically to creating and
+ * to editing an entry.
+ *
+ * `superRefine` rather than chained `.refine` calls so each message lands on
+ * the field that is actually wrong, and so the object stays extendable — a
+ * refined Zod schema is no longer an object and cannot be given an id later.
+ */
+function checkTimeEntry(data: TimeEntryShape, ctx: z.RefinementCtx) {
+  const hasSpan = Boolean(data.startedAt && data.endedAt);
+
+  if (data.durationMinutes === undefined && !hasSpan) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["durationMinutes"],
+      message: "Give a duration, or a start and an end time.",
+    });
+    return;
+  }
+
+  if (!hasSpan) return;
+
+  const start = new Date(data.startedAt!).getTime();
+  const end = new Date(data.endedAt!).getTime();
+
+  if (end <= start) {
+    ctx.addIssue({ code: "custom", path: ["endedAt"], message: "End must be after start." });
+    return;
+  }
+
+  const minutes = Math.round((end - start) / 60_000);
+  if (minutes > MAX_ENTRY_MINUTES) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["endedAt"],
+      message: "That is more than a day — split it into separate entries.",
+    });
+  }
+
+  // Time that has not happened yet cannot have been worked. Allowing it would
+  // let a mistyped year put hours into a week nobody can reconcile.
+  if (end > Date.now() + 60_000) {
+    ctx.addIssue({ code: "custom", path: ["endedAt"], message: "That is in the future." });
+  }
+}
+
+export const manualTimeEntrySchema = z
+  .object({ taskId: z.string().min(1, "Pick a task."), ...timeEntryFields })
+  .superRefine(checkTimeEntry);
+
+export const updateTimeEntrySchema = z
+  .object({ entryId: z.string().min(1), ...timeEntryFields })
+  .superRefine(checkTimeEntry);
+
+export const startTimerSchema = z.object({
+  taskId: z.string().min(1, "Pick a task."),
+  note: z.string().trim().max(500).default(""),
+});
+
+export type ManualTimeEntryInput = z.infer<typeof manualTimeEntrySchema>;
+export type UpdateTimeEntryInput = z.infer<typeof updateTimeEntrySchema>;
 
 // ============================================================================
 // CAMPAIGNS

@@ -3,6 +3,7 @@ import type {
   Priority as DbPriority,
   ProjectStatus as DbProjectStatus,
   Role as DbRole,
+  Theme as DbTheme,
   SectionType as DbSectionType,
   TaskStatus as DbTaskStatus,
 } from "@/lib/generated/prisma/enums";
@@ -10,6 +11,7 @@ import type {
   CampaignStatus,
   Priority,
   ProjectStatus,
+  Theme,
   Role,
   SectionType,
   TaskStatus,
@@ -92,3 +94,15 @@ export function isoToDate(value: string | null | undefined): Date | null {
   const [year, month, day] = value.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, day));
 }
+
+export const themeToDomain: Record<DbTheme, Theme> = {
+  LIGHT: "light",
+  DARK: "dark",
+  SYSTEM: "system",
+};
+
+export const themeToDb: Record<Theme, DbTheme> = {
+  light: "LIGHT",
+  dark: "DARK",
+  system: "SYSTEM",
+};

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { TODAY, getMonthGrid } from "@/lib/domain";
+import { getMonthGrid, todayIso } from "@/lib/domain";
 import { getProjects, getTasks } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { projectScope, requirePage } from "@/lib/session";
 import { taskStatusColor } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
@@ -11,12 +11,13 @@ export const metadata: Metadata = { title: "Calendar" };
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default async function CalendarPage() {
-  const viewer = await requireUser("/projects/calendar");
+  const viewer = await requirePage("calendar");
   const [tasks, projects] = await Promise.all([
     getTasks(viewer.workspaceId),
-    getProjects(viewer.workspaceId),
+    getProjects(viewer.workspaceId, await projectScope()),
   ]);
-  const { cells, label } = getMonthGrid(TODAY);
+  const today = todayIso();
+  const { cells, label } = getMonthGrid(today);
   const projectName = (id: string) => projects.find((project) => project.id === id)?.name ?? "";
 
   return (
@@ -43,7 +44,7 @@ export default async function CalendarPage() {
               key={date ?? `empty-${index}`}
               className={cn(
                 "min-h-[80px] bg-card p-2",
-                date === TODAY && "bg-primary/5 ring-1 ring-inset ring-primary/30",
+                date === today && "bg-primary/5 ring-1 ring-inset ring-primary/30",
               )}
             >
               {date ? (

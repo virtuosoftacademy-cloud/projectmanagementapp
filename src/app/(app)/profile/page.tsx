@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Camera, Clock, FolderKanban, SquareCheckBig } from "lucide-react";
-import { UserAvatar } from "@/components/ui/user-avatar";
+import { Clock, FolderKanban, SquareCheckBig } from "lucide-react";
+import { ImageUpload } from "@/components/ui/image-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,18 +12,18 @@ import { Progress } from "@/components/ui/progress";
 import { TabbedPanel } from "@/components/ui/tabbed-panel";
 import { roleLabel } from "@/lib/permissions";
 import { getMember, getMemberStats, getProjectStats, getProjects } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { projectScope, requirePage } from "@/lib/session";
 import { statusVariant } from "@/lib/status";
 import { formatPkr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "My Profile" };
 
 export default async function ProfilePage() {
-  const viewer = await requireUser("/profile");
+  const viewer = await requirePage("profile");
   const [stats, profile, projects] = await Promise.all([
     getMemberStats(viewer.workspaceId, viewer.id),
     getMember(viewer.workspaceId, viewer.id),
-    getProjects(viewer.workspaceId),
+    getProjects(viewer.workspaceId, await projectScope()),
   ]);
 
   const myProjects = projects.filter((project) =>
@@ -38,7 +38,7 @@ export default async function ProfilePage() {
   const projectName = (id: string) => projects.find((project) => project.id === id)?.name ?? "";
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold leading-tight tracking-tight">My Profile</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -49,20 +49,13 @@ export default async function ProfilePage() {
       <Card className="shadow-none">
         <CardContent className="p-6">
           <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-            <div className="relative">
-              <UserAvatar
-                name={viewer.name}
-                className="h-20 w-20 bg-primary/10"
-                textClassName="text-xl text-primary"
-              />
-              <button
-                type="button"
-                aria-label="Change photo"
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-foreground/40 opacity-0 transition-opacity hover:opacity-100 focus-visible:opacity-100"
-              >
-                <Camera className="h-5 w-5 text-background" />
-              </button>
-            </div>
+            <ImageUpload
+              kind="avatar"
+              shape="round"
+              label="Profile photo"
+              currentUrl={profile?.image ?? null}
+              className="w-full sm:max-w-md"
+            />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-semibold">{viewer.name}</h2>

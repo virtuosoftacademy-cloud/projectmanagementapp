@@ -8,6 +8,7 @@ import {
   ChevronRight,
   CircleAlert,
   Plus,
+  LayoutGrid,
   Search,
   Trash2,
   UserCheck,
@@ -19,6 +20,7 @@ import {
   setUsersDisabledAction,
   type ActionResult,
 } from "@/app/(app)/admin/users/actions";
+import { assignCustomRoleAction } from "@/app/(app)/admin/users/roles/actions";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,25 +28,37 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
-import type { AdminUser } from "@/lib/admin";
+import { PageAccessDialog } from "@/components/admin/page-access-dialog";
+import type { AdminUser, CustomRoleRow } from "@/lib/admin";
 import type { Role, Team } from "@/lib/domain";
-import { ROLES, roleLabel } from "@/lib/permissions";
+import { FIXED_ROLES, ROLES, roleLabel } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 12;
+
+/** Namespaces custom role ids in the role dropdown, apart from base role names. */
+const CUSTOM_PREFIX = "custom:";
 
 export function UsersTable({
   users,
   teams,
   canInvite,
+  canAssignRoles,
+  customRoles,
   canManageRoles,
+  canDelete,
   currentUserId,
 }: {
   users: AdminUser[];
   teams: Team[];
   /** Owners and admins get the management controls; everyone else reads. */
   canInvite: boolean;
+  /** `workspace.settings` — may assign custom roles, but not change base roles. */
+  canAssignRoles: boolean;
+  customRoles: CustomRoleRow[];
   canManageRoles: boolean;
+  /** `members.delete` — owner-only, and separate from managing roles. */
+  canDelete: boolean;
   currentUserId: string;
 }) {
   const router = useRouter();
@@ -56,6 +70,7 @@ export function UsersTable({
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
   const [removing, setRemoving] = useState<AdminUser | null>(null);
+  const [accessFor, setAccessFor] = useState<AdminUser | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -95,6 +110,74 @@ export function UsersTable({
   function resetTo(pageNumber: number) {
     setPage(pageNumber);
     setSelected([]);
+  }
+
+  /**
+   * Base roles and custom roles in one dropdown.
+   *
+   * Custom values are prefixed so the two namespaces cannot collide — a role
+   * named `member` is a different thing from the base `member`, and the
+   * dispatch below has to tell them apart.
+   *
+   * Only an owner (`roles.manage`) may change the base role. An admin holds
+   * `workspace.settings`, which is enough to create and assign custom roles but
+   * not to re-rank someone, so they see the custom entries plus a way back to
+   * whichever base role the person already has.
+   */
+  function roleOptions(user: AdminUser) {
+    const custom = customRoles
+      .filter((role) => role.isActive)
+      .map((role) => ({
+        value: `${CUSTOM_PREFIX}${role.id}`,
+        label: `${role.label} (custom)`,
+      }));
+
+    // Only the fixed roles are offered as base roles. The others exist as
+    // editable rows above — listing their enum values too would let someone
+    // hold "member" after the Member role had been deleted, which would make
+    // deleting a role look like it had not worked.
+    const base = canManageRoles
+      ? FIXED_ROLES.map((role) => ({ value: role, label: roleLabel(role) }))
+      : // An admin cannot re-rank anyone, so their only base option is whatever
+        // the person already holds — enough to clear a custom role, no more.
+        [];
+
+    const options = [...base, ...custom];
+
+    // Anyone holding a plain base role that is no longer offered — seeded data,
+    // or someone assigned before those roles moved into rows — still needs
+    // their current value present, or the select would render blank and the
+    // first change would look like it came from nowhere.
+    const current = user.customRole ? `${CUSTOM_PREFIX}${user.customRole.id}` : user.role;
+    if (current && !options.some((option) => option.value === current)) {
+      options.unshift({
+        value: current,
+        label: `${roleLabel(user.role ?? "member")} (base)`,
+      });
+    }
+
+    return options;
+  }
+
+  /** Routes the choice to whichever action owns that kind of role. */
+  function changeRole(user: AdminUser, value: string) {
+    if (value.startsWith(CUSTOM_PREFIX)) {
+      const roleId = value.slice(CUSTOM_PREFIX.length);
+      run(() => assignCustomRoleAction(user.id, roleId));
+      return;
+    }
+
+    // Moving to a base role has to clear any custom role first, or the
+    // membership would keep pointing at one and resolve straight back to it.
+    run(async () => {
+      if (user.customRole) {
+        const cleared = await assignCustomRoleAction(user.id, null);
+        if (!cleared.ok) return cleared;
+      }
+      return canManageRoles
+        ? setUserRoleAction(user.id, value as Role)
+        : { ok: true as const };
+    });
   }
 
   return (
@@ -240,7 +323,7 @@ export function UsersTable({
                   {canInvite ? (
                     <th className="px-3 py-2 font-medium">Last sign-in</th>
                   ) : null}
-                  {canManageRoles ? (
+                  {canInvite ? (
                     <th className="px-3 py-2 text-right font-medium">Actions</th>
                   ) : null}
                 </tr>
@@ -298,20 +381,33 @@ export function UsersTable({
                         <Badge variant="muted" title="This account belongs to another workspace">
                           Not a member
                         </Badge>
-                      ) : canManageRoles ? (
+                      ) : canManageRoles || canAssignRoles ? (
                         <SelectField
                           aria-label={`Role for ${user.name}`}
-                          value={user.role}
-                          disabled={pending}
-                          className="h-8 w-[120px]"
-                          onValueChange={(value) =>
-                            run(() => setUserRoleAction(user.id, value as Role))
+                          value={
+                            user.customRole ? `${CUSTOM_PREFIX}${user.customRole.id}` : user.role
                           }
-                          options={ROLES.map((role) => ({ value: role, label: roleLabel(role) }))}
+                          // Changing your own role is refused server-side; the
+                          // owner check is what stops the last one demoting
+                          // themselves out of the workspace.
+                          disabled={pending || user.id === currentUserId}
+                          className="h-8 w-[150px]"
+                          onValueChange={(value) => changeRole(user, value)}
+                          options={roleOptions(user)}
                         />
                       ) : (
-                        <Badge variant="outline">{roleLabel(user.role)}</Badge>
+                        <Badge variant="outline">
+                          {user.customRole?.label ?? roleLabel(user.role)}
+                        </Badge>
                       )}
+
+                      {/* A custom role reads as its base everywhere else, so
+                          name the base here rather than leaving it implicit. */}
+                      {user.customRole && user.role ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          inherits {roleLabel(user.role)}
+                        </p>
+                      ) : null}
                     </td>
 
                     <td className="whitespace-nowrap px-3 py-2 text-muted-foreground">
@@ -330,9 +426,27 @@ export function UsersTable({
                       </td>
                     ) : null}
 
-                    {canManageRoles ? (
+                    {/*
+                      Shown for `members.invite` rather than `roles.manage`, so
+                      admins reach page access. Delete stays owner-only inside.
+                    */}
+                    {canInvite ? (
                       <td className="whitespace-nowrap px-3 py-2 text-right">
-                        {user.id !== currentUserId && user.inWorkspace ? (
+                        {/* Own row excluded — the action refuses it anyway, to
+                            stop an owner locking themselves out. */}
+                        {user.id !== currentUserId && user.inWorkspace && user.role ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={pending}
+                            onClick={() => setAccessFor(user)}
+                            aria-label={`Page access for ${user.name}`}
+                            title="Page access"
+                          >
+                            <LayoutGrid className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {canDelete && user.id !== currentUserId && user.inWorkspace ? (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -351,7 +465,7 @@ export function UsersTable({
                 {visible.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={4 + (canInvite ? 2 : 0) + (canManageRoles ? 1 : 0)}
+                      colSpan={4 + (canInvite ? 3 : 0)}
                       className="px-3 py-8 text-center text-sm text-muted-foreground"
                     >
                       No users match those filters.
@@ -412,6 +526,19 @@ export function UsersTable({
             : ""
         }
       />
+
+      {/* Keyed so reopening on a different person resets the tick boxes. */}
+      {accessFor && accessFor.role ? (
+        <PageAccessDialog
+          key={accessFor.id}
+          open
+          onClose={() => setAccessFor(null)}
+          userId={accessFor.id}
+          userName={accessFor.name}
+          role={accessFor.role}
+          assigned={accessFor.pages}
+        />
+      ) : null}
     </div>
   );
 }

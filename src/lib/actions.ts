@@ -65,6 +65,11 @@ export async function createProjectAction(input: unknown): Promise<ActionResult>
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const data = parsed.data;
 
+  // The creator is always a member, whether or not they ticked themselves in
+  // the picker. Project listings are scoped to the viewer's own projects, so
+  // without this you could create a project and immediately not see it.
+  const memberIds = [...new Set([user.id, ...data.memberIds])];
+
   await prisma.project.create({
     data: {
       workspaceId: user.workspaceId,
@@ -75,7 +80,7 @@ export async function createProjectAction(input: unknown): Promise<ActionResult>
       teamId: data.teamId || null,
       startDate: isoToDate(data.startDate),
       endDate: isoToDate(data.endDate),
-      members: { create: data.memberIds.map((userId) => ({ userId })) },
+      members: { create: memberIds.map((userId) => ({ userId })) },
     },
   });
 
@@ -139,8 +144,16 @@ export async function addProjectMembersAction(
 }
 
 /** Switch a project's optional sub-pages on or off. */
+/**
+ * Switch a project's optional pages on or off. Owners and admins only.
+ *
+ * `workspace.settings` rather than `projects.edit`: which pages a project has
+ * is a shape-of-the-workspace decision, not day-to-day project work. Under
+ * `projects.edit` a member could remove Reports or Billing-adjacent pages from
+ * a project for everyone on it, which is not theirs to decide.
+ */
 export async function updateProjectFeaturesAction(input: unknown): Promise<ActionResult> {
-  const user = await requirePermission("projects.edit");
+  const user = await requirePermission("workspace.settings");
 
   const parsed = projectFeaturesSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };

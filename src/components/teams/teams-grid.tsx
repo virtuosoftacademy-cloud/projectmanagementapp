@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -94,7 +94,7 @@ export function TeamsGrid({
   }
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold leading-tight tracking-tight">Teams</h1>
@@ -234,6 +234,7 @@ export function TeamsGrid({
         open={creating}
         onClose={() => setCreating(false)}
         members={members}
+        teams={teams}
         title="Create New Team"
         description="Set up a team, assign a lead, and add members."
         submitLabel="Create Team"
@@ -246,6 +247,7 @@ export function TeamsGrid({
         open={editing !== null}
         onClose={() => setEditing(null)}
         members={members}
+        teams={teams}
         title="Edit Team"
         description="Update the team's details and membership."
         submitLabel="Save"
@@ -284,6 +286,7 @@ function TeamDialog({
   onClose,
   onSubmit,
   members,
+  teams,
   title,
   description,
   submitLabel,
@@ -294,6 +297,7 @@ function TeamDialog({
   onClose: () => void;
   onSubmit: (draft: Draft) => void;
   members: Member[];
+  teams: Pick<Team, "id" | "name">[];
   title: string;
   description: string;
   submitLabel: string;
@@ -309,6 +313,12 @@ function TeamDialog({
     memberIds: team?.members.map((member) => member.id) ?? [],
   });
   const [slugTouched, setSlugTouched] = useState(Boolean(team));
+
+  // Resolves a member's `teamId` to a name for the "already on X" markers.
+  const teamNameById = useMemo(
+    () => new Map(teams.map((item) => [item.id, item.name])),
+    [teams],
+  );
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
@@ -420,28 +430,58 @@ function TeamDialog({
           <legend className="mb-1.5 text-sm font-medium leading-none">
             Members ({draft.memberIds.length} selected)
           </legend>
+          <p className="mb-1.5 text-xs text-muted-foreground">
+            Someone can only be on one team, so selecting a person already on another
+            team moves them here.
+          </p>
           <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
-            {members.map((member) => (
-              <label
-                key={member.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-muted/50"
-              >
-                <input
-                  type="checkbox"
-                  checked={draft.memberIds.includes(member.id)}
-                  onChange={() => toggleMember(member.id)}
-                  className="h-4 w-4 accent-[hsl(var(--primary))]"
-                />
-                <Avatar name={member.name} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{member.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {member.email}
+            {members.map((member) => {
+              // Where they sit today, which decides whether ticking them is an
+              // addition or a move away from another team.
+              const elsewhere =
+                member.teamId && member.teamId !== team?.id
+                  ? (teamNameById.get(member.teamId) ?? "another team")
+                  : null;
+
+              return (
+                <label
+                  key={member.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-muted/50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={draft.memberIds.includes(member.id)}
+                    onChange={() => toggleMember(member.id)}
+                    className="h-4 w-4 accent-[hsl(var(--primary))]"
+                  />
+                  <Avatar name={member.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{member.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {member.email}
+                    </span>
                   </span>
-                </span>
-                <Badge variant="outline">{member.role}</Badge>
-              </label>
-            ))}
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {elsewhere ? (
+                      <Badge
+                        variant="outline"
+                        className="border-warning/40 text-warning"
+                        title={`Currently on ${elsewhere} — selecting moves them here`}
+                      >
+                        {elsewhere}
+                      </Badge>
+                    ) : member.teamId ? (
+                      <Badge variant="secondary">On this team</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        No team
+                      </Badge>
+                    )}
+                    <Badge variant="outline">{member.role}</Badge>
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </fieldset>
 

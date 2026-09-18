@@ -31,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { ProjectFeaturesDialog } from "@/components/projects/project-features-dialog";
 import { visibleSections, type NavItem } from "@/components/navigation";
 import type { Project, WorkspaceSummary } from "@/lib/domain";
-import { roleLabel } from "@/lib/permissions";
+import { roleLabel, type AppPage } from "@/lib/permissions";
 import type { ActiveSessionUser } from "@/lib/session";
 import { createWorkspaceAction } from "@/lib/workspace-actions";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,9 @@ export function AppSidebar({
   projects,
   teamCount,
   workspaces,
+  pages,
+  canCreateWorkspace,
+  canManageFeatures,
   badges = {},
   collapsible = true,
   onNavigate,
@@ -56,6 +59,18 @@ export function AppSidebar({
   projects: Pick<Project, "id" | "name" | "features">[];
   teamCount: number;
   workspaces: WorkspaceSummary[];
+  /** Pages this member may reach — unassigned ones are dropped from the nav. */
+  pages: AppPage[];
+  /**
+   * `workspace.create`, resolved on the server.
+   *
+   * Not derived from `user.role` here: that is the *base* role, so a custom
+   * role that narrows this permission away would still show the button and
+   * then be refused by the action.
+   */
+  canCreateWorkspace: boolean;
+  /** `workspace.settings` — may change which pages a project has. */
+  canManageFeatures: boolean;
   /** Counts keyed by href, e.g. overdue tasks on /projects/tasks. */
   badges?: Record<string, number>;
   /** The mobile drawer renders expanded and hides the collapse control. */
@@ -67,7 +82,8 @@ export function AppSidebar({
   const { update } = useSession();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
-  const [switching, setSwitching] = useState(false);
+  const [switching, startSwitching] = useTransition();
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   /** Which project's feature picker is open, by id. */
   const [configuringProjectId, setConfiguringProjectId] = useState<string | null>(null);
@@ -78,14 +94,51 @@ export function AppSidebar({
 
   const collapsed = collapsible && isCollapsed;
   const currentWorkspace = workspaces.find((workspace) => workspace.id === user.workspaceId);
+
   const configuringProject = projects.find((project) => project.id === configuringProjectId);
 
+  /**
+   * Move this session into another workspace.
+   *
+   * `update()` re-mints the JWT, and the server re-verifies membership before
+   * honouring the request rather than trusting the id sent from here.
+   *
+   * The pending flag is a `useTransition`, not `useState`: React clears it
+   * itself when the navigation settles, so a failed switch cannot leave the
+   * control disabled for the rest of the session.
+   */
   async function switchWorkspace(workspaceId: string) {
     if (workspaceId === user.workspaceId || switching) return;
-    setSwitching(true);
-    await update({ workspaceId });
-    router.push("/dashboard");
-    router.refresh();
+
+    setSwitchError(null);
+
+    // `update()` resolves to the new session, or to a falsy value when
+    // next-auth declines to run — it returns early while the session is
+    // loading. Navigating on a falsy result made a failed switch look like a
+    // successful one: the page moved, the workspace did not.
+    const next = await update({ workspaceId });
+    if (!next) {
+      setSwitchError("Could not switch workspace. Try again in a moment.");
+      return;
+    }
+
+    startSwitching(() => {
+      /*
+       * Only leave the page when staying would be wrong. A project page belongs
+       * to the workspace being left, so its id means nothing in the new one;
+       * every other screen is workspace-generic and simply re-resolves.
+       *
+       * Refreshing inside a transition is what stops the "whole page reloaded"
+       * feeling: `refresh()` re-renders the entire tree from the root layout,
+       * and outside a transition React blanks the current UI while it waits.
+       * Inside one, the existing page stays on screen until the new data is
+       * ready, so the switch reads as an update rather than a reload.
+       */
+      if (pathname.startsWith("/projects/project/")) {
+        router.push("/dashboard");
+      }
+      router.refresh();
+    });
   }
 
   function submitNewWorkspace() {
@@ -110,7 +163,7 @@ export function AppSidebar({
         : [...previous, href],
     );
 
-  const sections = visibleSections(user.role, projects, badges);
+  const sections = visibleSections(user.role, projects, badges, pages);
 
   function renderNavItem(item: NavItem, level = 0): React.ReactNode {
     const isActive = pathname === item.href;
@@ -126,7 +179,10 @@ export function AppSidebar({
     // A project row trades the expand chevron for a "＋" that opens its feature
     // picker. The button has to sit outside the Link — nesting it would be
     // invalid HTML and its click would also toggle the expand.
-    const isProjectRow = Boolean(item.projectId) && !collapsed;
+    // The "＋" opens the feature picker, which is owner/admin only — so a
+    // member sees the ordinary expand chevron instead of a control that would
+    // be refused on submit.
+    const isProjectRow = Boolean(item.projectId) && !collapsed && canManageFeatures;
 
     return (
       <div key={`${item.href}-${item.title}`}>
@@ -150,9 +206,9 @@ export function AppSidebar({
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
               isActive &&
                 level === 0 &&
-                "border border-primary/20 bg-gradient-to-r from-primary/20 to-primary/5 text-primary shadow-sm",
-              isParentActive && "border border-primary/10 bg-primary/10 text-primary",
-              isChildActive && "ml-6 border-l-2 border-primary/30 bg-primary/5 text-primary",
+                "border border-sidebar-primary/30 bg-gradient-to-r from-sidebar-primary/25 to-sidebar-primary/5 text-sidebar-primary shadow-sm",
+              isParentActive && "border border-sidebar-primary/20 bg-sidebar-primary/10 text-sidebar-primary",
+              isChildActive && "ml-6 border-l-2 border-sidebar-primary/40 bg-sidebar-primary/10 text-sidebar-primary",
               level > 0 && "relative ml-8 py-1.5 text-xs",
               collapsed && "justify-center px-2",
             )}
@@ -164,14 +220,14 @@ export function AppSidebar({
 
             {/* Active rail on a selected top-level item */}
             {isActive && level === 0 ? (
-              <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-primary to-primary/60 shadow-sm" />
+              <span className="absolute left-0 top-1/2 h-6 w-1 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-sidebar-primary to-sidebar-primary/60 shadow-sm" />
             ) : null}
 
             <item.icon
               className={cn(
                 "shrink-0 transition-colors",
                 collapsed ? "h-5 w-5" : "h-4 w-4",
-                isActive || isParentActive ? "text-primary" : "text-sidebar-foreground/70",
+                isActive || isParentActive ? "text-sidebar-primary" : "text-sidebar-foreground/70",
               )}
             />
 
@@ -181,7 +237,7 @@ export function AppSidebar({
                   className={cn(
                     "flex-1 truncate font-medium",
                     isActive || isParentActive
-                      ? "text-primary"
+                      ? "text-sidebar-primary"
                       : "text-sidebar-foreground",
                   )}
                 >
@@ -189,7 +245,7 @@ export function AppSidebar({
                 </span>
 
                 {item.badge ? (
-                  <span className="inline-flex items-center justify-center rounded-full border border-primary/15 bg-primary/10 px-2 py-0.5 font-mono text-xs font-medium text-primary">
+                  <span className="inline-flex items-center justify-center rounded-full border border-sidebar-primary/25 bg-sidebar-primary/15 px-2 py-0.5 font-mono text-xs font-medium text-sidebar-primary">
                     {item.badge}
                   </span>
                 ) : null}
@@ -304,21 +360,36 @@ export function AppSidebar({
                 ) : null}
               </DropdownMenuItem>
             ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={() => {
-                setCreateError(null);
-                setCreatingWorkspace(true);
-              }}
-              className="gap-2"
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-sidebar-border text-muted-foreground">
-                <Plus className="h-3.5 w-3.5" />
-              </span>
-              New workspace
-            </DropdownMenuItem>
+            {/*
+              `workspace.create` is owner/admin only, and the action enforces
+              it regardless — hiding the entry keeps the menu honest rather
+              than offering something that fails on submit.
+            */}
+            {canCreateWorkspace ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setCreateError(null);
+                    setCreatingWorkspace(true);
+                  }}
+                  className="gap-2"
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded border border-dashed border-sidebar-border text-muted-foreground">
+                    <Plus className="h-3.5 w-3.5" />
+                  </span>
+                  New workspace
+                </DropdownMenuItem>
+              </>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {switchError && !collapsed ? (
+          <p role="alert" className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-xs text-destructive-foreground">
+            {switchError}
+          </p>
+        ) : null}
 
         <FormDialog
           open={creatingWorkspace}

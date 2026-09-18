@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { MessageCenter } from "@/components/messages/message-center";
 import { getMembers, getMessages } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { requirePage } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Messages" };
 
 export default async function MessagesPage() {
-  const viewer = await requireUser("/messages");
+  const viewer = await requirePage("messages");
   const [members, messages] = await Promise.all([
     getMembers(viewer.workspaceId),
     getMessages(viewer.workspaceId, viewer.id),

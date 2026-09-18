@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import type { Role } from "@/lib/domain";
 import { roleToDb } from "@/lib/mappers";
 import { prisma } from "@/lib/prisma";
+import { resolveWorkspaceTeamId } from "@/lib/queries";
 import { requirePermission } from "@/lib/session";
 import {
   firstError,
@@ -41,6 +42,21 @@ export async function updateRoleAction(formData: FormData): Promise<ActionResult
   });
   if (!membership) return { ok: false, error: "That member no longer exists." };
 
+  // Same guard as `setUserRoleAction`. `roles.manage` is owner *and* admin, so
+  // without this an admin could grant themselves the owner role and pick up
+  // account deletion with it.
+  if (parsed.data.userId === actor.id) {
+    return { ok: false, error: "You cannot change your own role." };
+  }
+  if (actor.role !== "owner") {
+    if (parsed.data.role === "owner") {
+      return { ok: false, error: "Only an owner can grant the owner role." };
+    }
+    if (membership.role === "OWNER") {
+      return { ok: false, error: "Only an owner can change another owner's role." };
+    }
+  }
+
   if (membership.role === "OWNER" && parsed.data.role !== "owner") {
     const owners = await activeOwnerCount(actor.workspaceId);
     if (owners <= 1) {
@@ -57,13 +73,7 @@ export async function updateRoleAction(formData: FormData): Promise<ActionResult
   // session refresh rather than instantly.
   refresh();
 
-  return {
-    ok: true,
-    error:
-      parsed.data.userId === actor.id
-        ? "You changed your own role — sign out and back in to apply it."
-        : undefined,
-  };
+  return { ok: true };
 }
 
 /** Invite a member into this workspace. Owners and admins only. */
@@ -74,6 +84,9 @@ export async function inviteMemberAction(formData: FormData): Promise<ActionResu
     name: formData.get("name"),
     email: formData.get("email"),
     role: formData.get("role") ?? "member",
+    // Only the Team Members dialog offers a team picker; the settings card
+    // posts no such field, which parses to "" and means "no team".
+    teamId: formData.get("teamId") ?? "",
     password: formData.get("password") ?? "",
   });
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
@@ -82,11 +95,15 @@ export async function inviteMemberAction(formData: FormData): Promise<ActionResu
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) return { ok: false, error: "Someone already uses that email." };
 
+  const team = await resolveWorkspaceTeamId(data.teamId, actor.workspaceId);
+  if (!team.ok) return { ok: false, error: "That team is not in this workspace." };
+
   await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
         name: data.name,
         email: data.email,
+        teamId: team.teamId,
         passwordHash: data.password ? await bcrypt.hash(data.password, 12) : null,
         lastWorkspaceId: actor.workspaceId,
       },

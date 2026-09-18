@@ -4,15 +4,15 @@ import { KpiCard } from "@/components/dashboard/kpi-card";
 import { ProjectsGrid, type ProjectCard } from "@/components/projects/projects-grid";
 import { can } from "@/lib/permissions";
 import { getMembers, getMetrics, getProjectStats, getProjects, getTeams } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { projectScope, requirePage } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Projects" };
 
 export default async function ProjectsPage() {
-  const viewer = await requireUser("/projects");
+  const viewer = await requirePage("projects");
   const [metrics, projects, members, teams] = await Promise.all([
     getMetrics(viewer.workspaceId),
-    getProjects(viewer.workspaceId),
+    getProjects(viewer.workspaceId, await projectScope()),
     getMembers(viewer.workspaceId),
     getTeams(viewer.workspaceId),
   ]);

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { SelectField } from "@/components/ui/select-field";
 import { logTimeAction } from "@/lib/actions";
-import { TODAY, formatDay } from "@/lib/domain";
+import { formatDay } from "@/lib/domain";
 import { cn, formatDuration } from "@/lib/utils";
 
 export type LogRow = {
@@ -30,12 +30,18 @@ export function TimeLogs({
   logs,
   tasks,
   canLog,
+  today,
   children,
 }: {
   logs: LogRow[];
   tasks: { id: string; title: string; projectName: string; estimateHours: number }[];
   canLog: boolean;
-  /** Cards rendered between the header and the log table. */
+  /**
+   * Today as `yyyy-MM-dd`, resolved on the server and passed in rather than
+   * read here: a browser in a different timezone than the server would
+   * otherwise hydrate a date field with a different value than was rendered.
+   */
+  today: string;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -135,6 +141,7 @@ export function TimeLogs({
         open={logging}
         onClose={() => setLogging(false)}
         tasks={tasks}
+        today={today}
         pending={pending}
         onSubmit={(draft) => {
           startTransition(async () => {
@@ -156,18 +163,20 @@ function LogTimeDialog({
   onClose,
   onSubmit,
   tasks,
+  today,
   pending,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: (draft: { taskId: string; minutes: number; date: string; note: string }) => void;
   tasks: { id: string; title: string; projectName: string }[];
+  today: string;
   pending?: boolean;
 }) {
   const [draft, setDraft] = useState({
     taskId: "",
     minutes: 60,
-    date: TODAY,
+    date: today,
     note: "",
   });
 

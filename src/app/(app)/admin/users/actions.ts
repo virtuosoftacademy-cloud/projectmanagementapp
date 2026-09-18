@@ -2,12 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/domain";
-import { roleToDb } from "@/lib/mappers";
+import { roleToDb, roleToDomain } from "@/lib/mappers";
+import { pagesForRole, type AppPage } from "@/lib/permissions";
+import { resolveWorkspaceTeamId } from "@/lib/queries";
 import { requirePermission } from "@/lib/session";
 import {
+  addMemberSchema,
   createUserSchema,
+  setUserPagesSchema,
   firstError,
   setDisabledSchema,
   updateRoleSchema,
@@ -18,7 +23,44 @@ export type ActionResult = { ok: boolean; error?: string };
 function refresh() {
   revalidatePath("/admin/users");
   revalidatePath("/admin/users/roles");
+  // The roster reads the same data, so role changes, disables and deletes have
+  // to invalidate it too — not just the directory they were performed from.
+  revalidatePath("/team-members");
   revalidatePath("/settings");
+}
+
+/**
+ * The two things `roles.manage` alone must not allow, now that admins hold it.
+ *
+ * Without these an admin could hand themselves the owner role, or grant it to
+ * someone else — which would make `roles.manage` a route to every owner-only
+ * permission (account deletion) rather than a permission of its own.
+ *
+ * Returns an error to surface, or null when the change is allowed.
+ */
+function guardRoleChange(
+  actor: { id: string; role: Role },
+  targetUserId: string,
+  currentRole: string,
+  nextRole: string,
+): ActionResult | null {
+  // Applies to owners too. Changing your own role is how someone ends up
+  // locked out of the screen they were standing on, and it is never the
+  // intended click — a second owner or admin can do it instead.
+  if (actor.id === targetUserId) {
+    return { ok: false, error: "You cannot change your own role." };
+  }
+
+  if (actor.role === "owner") return null;
+
+  if (nextRole === "owner") {
+    return { ok: false, error: "Only an owner can grant the owner role." };
+  }
+  if (currentRole === "OWNER") {
+    return { ok: false, error: "Only an owner can change another owner's role." };
+  }
+
+  return null;
 }
 
 /** Owner count for a workspace, restricted to accounts that can still sign in. */
@@ -41,6 +83,9 @@ export async function createUserAction(input: unknown): Promise<ActionResult> {
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) return { ok: false, error: "Someone already uses that email." };
 
+  const team = await resolveWorkspaceTeamId(data.teamId, actor.workspaceId);
+  if (!team.ok) return { ok: false, error: "That team is not in this workspace." };
+
   await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
       data: {
@@ -48,7 +93,7 @@ export async function createUserAction(input: unknown): Promise<ActionResult> {
         email: data.email,
         phone: data.phone || null,
         designation: data.designation || null,
-        hourlyRate: data.hourlyRate,
+        teamId: team.teamId,
         monthlyHours: data.monthlyHours,
         passwordHash: await bcrypt.hash(data.password, 12),
         disabledAt: data.active ? null : new Date(),
@@ -58,6 +103,103 @@ export async function createUserAction(input: unknown): Promise<ActionResult> {
     await tx.workspaceMember.create({
       data: { workspaceId: actor.workspaceId, userId: created.id, role: roleToDb[data.role as Role] },
     });
+  });
+
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * Add an account that already exists to the caller's workspace.
+ *
+ * The counterpart to `createUserAction`: that one makes a new account, this one
+ * grants an existing account access here. Kept separate because they differ in
+ * what can go wrong — this cannot fail on a duplicate email, but it can race
+ * another admin adding the same person, so the membership insert is guarded by
+ * a lookup and the composite primary key behind it.
+ */
+export async function addMemberAction(formData: FormData): Promise<ActionResult> {
+  const actor = await requirePermission("members.invite");
+
+  const parsed = addMemberSchema.safeParse({
+    userId: formData.get("userId"),
+    role: formData.get("role") ?? "member",
+    teamId: formData.get("teamId") ?? "",
+  });
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { id: data.userId }, select: { id: true } });
+  if (!user) return { ok: false, error: "That account no longer exists." };
+
+  const already = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: data.userId } },
+  });
+  if (already) return { ok: false, error: "They are already in this workspace." };
+
+  const team = await resolveWorkspaceTeamId(data.teamId, actor.workspaceId);
+  if (!team.ok) return { ok: false, error: "That team is not in this workspace." };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.workspaceMember.create({
+      data: {
+        workspaceId: actor.workspaceId,
+        userId: data.userId,
+        role: roleToDb[data.role as Role],
+      },
+    });
+
+    // Only touch their team when one was chosen. `User.teamId` is a single
+    // column shared across every workspace they belong to, so silently
+    // clearing it here would unassign them elsewhere.
+    if (team.teamId) {
+      await tx.user.update({ where: { id: data.userId }, data: { teamId: team.teamId } });
+    }
+  });
+
+  refresh();
+  return { ok: true };
+}
+
+/**
+ * Assign which pages a member may reach. Owners and admins only.
+ *
+ * Stores the raw selection; `resolvePages` intersects it with the role's own
+ * pages at read time rather than at write time, so a later role change is
+ * reflected immediately instead of leaving a stale list behind.
+ *
+ * Assigning *every* page the role allows clears the column back to null —
+ * "unrestricted" and "restricted to exactly the default set" behave the same,
+ * and storing null keeps them following their role as it changes.
+ */
+export async function setUserPagesAction(
+  userId: string,
+  pages: string[],
+): Promise<ActionResult> {
+  const actor = await requirePermission("members.invite");
+
+  const parsed = setUserPagesSchema.safeParse({ userId, pages });
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: data.userId } },
+  });
+  if (!membership) return { ok: false, error: "They are not in this workspace." };
+
+  // An owner locking themselves out of Users would leave no way back in.
+  if (data.userId === actor.id) {
+    return { ok: false, error: "You cannot change your own page access." };
+  }
+
+  const role = roleToDomain[membership.role];
+  const allowed = pagesForRole(role);
+  const selected = data.pages.filter((page) => allowed.includes(page as AppPage));
+  const unrestricted = selected.length === allowed.length;
+
+  await prisma.workspaceMember.update({
+    where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: data.userId } },
+    data: { pages: unrestricted ? Prisma.DbNull : selected },
   });
 
   refresh();
@@ -115,7 +257,7 @@ export async function setUsersDisabledAction(
  * but is a distinct feature from what's built here.
  */
 export async function deleteUserAction(userId: string): Promise<ActionResult> {
-  const actor = await requirePermission("roles.manage");
+  const actor = await requirePermission("members.delete");
 
   if (userId === actor.id) return { ok: false, error: "You cannot delete your own account." };
 
@@ -150,6 +292,9 @@ export async function setUserRoleAction(userId: string, role: string): Promise<A
     where: { workspaceId_userId: { workspaceId: actor.workspaceId, userId: parsed.data.userId } },
   });
   if (!membership) return { ok: false, error: "That account no longer exists." };
+
+  const guard = guardRoleChange(actor, parsed.data.userId, membership.role, parsed.data.role);
+  if (guard) return guard;
 
   if (membership.role === "OWNER" && parsed.data.role !== "owner") {
     const owners = await activeOwnerCount(actor.workspaceId);

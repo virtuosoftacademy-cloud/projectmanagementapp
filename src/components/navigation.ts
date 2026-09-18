@@ -7,18 +7,17 @@
 
 import {
   Building2,
-  ChartNoAxesColumn,
   Clock,
-  CreditCard,
   FileText,
   FolderKanban,
   Hash,
   LayoutDashboard,
   Layout,
+  Palette,
   ListTodo,
   Megaphone,
   MessageSquare,
-  Settings,
+  Sheet,
   ShieldCheck,
   Timer,
   User,
@@ -33,6 +32,7 @@ import {
   type ProjectFeature,
   type Role,
 } from "@/lib/domain";
+import { APP_PAGES, type AppPage } from "@/lib/permissions";
 
 export interface NavItem {
   title: string;
@@ -52,7 +52,6 @@ export interface NavSection {
 
 const EVERYONE: Role[] = ["owner", "admin", "manager", "member", "viewer", "guest"];
 const ADMINS: Role[] = ["owner", "admin"];
-const OWNERS: Role[] = ["owner"];
 const REPORT_READERS: Role[] = ["owner", "admin", "manager", "member", "viewer"];
 /** Roles holding `time.log` — the people who can actually record hours. */
 const WORKERS: Role[] = ["owner", "admin", "manager", "member"];
@@ -63,22 +62,21 @@ const WORKERS: Role[] = ["owner", "admin", "manager", "member"];
  * Grouped by *who an entry is for*, which mirrors the permission matrix in
  * `lib/permissions.ts` rather than inventing a second idea of privilege:
  *
- *   Navigation     — the shared workspace. Everything here is `projects.view`
- *                    territory: every role sees the screens, and the controls
- *                    inside them light up per role (see `canCreate` on
- *                    ProjectsGrid, `canInvite` on UsersTable). "Team Members"
- *                    is here, not under Administration, because the roster is
- *                    something every role is meant to reach.
- *   Administration — the owner/admin surface: `workspace.settings`,
- *                    `roles.manage`, `billing.manage`. Managing the workspace,
- *                    not working inside it.
- *   Account        — facts about *you*, not privileges. Workspaces lives here
- *                    because belonging to several is a property of the user;
- *                    the switcher in the sidebar header serves everyone, and
- *                    this is the page behind it.
+ *   Navigation     — the daily work surface: what you are doing and where your
+ *                    hours went.
+ *   Team Members   — the people side: the roster, talking to them, and the
+ *                    teams they belong to.
+ *   Administration — managing the workspace rather than working inside it:
+ *                    accounts, roles and the workspaces themselves.
+ *   Settings       — how the app behaves for *you*. No permission attaches to
+ *                    either entry; the theme is stored per browser.
  *
  * Empty sections are dropped by `visibleSections`, so a member simply never
  * sees an Administration heading.
+ *
+ * Reachable only by URL, deliberately rather than by oversight: `/settings`
+ * (workspace settings), `/projects/analytics`, and `/projects/time-tracking`
+ * — the last because time is now reached per project or through Timesheet.
  */
 function baseSections(): NavSection[] {
   return [
@@ -87,36 +85,54 @@ function baseSections(): NavSection[] {
       items: [
         { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: EVERYONE },
         { title: "All Projects", href: "/projects", icon: FolderKanban, roles: EVERYONE },
-        { title: "Team Members", href: "/admin/users", icon: Users, roles: EVERYONE },
-        { title: "Messages", href: "/messages", icon: MessageSquare, roles: EVERYONE },
+        // The workspace-wide weekly grid — every project you are on, in one
+        // sheet. Time Tracking is still reachable per project; it is no longer
+        // duplicated as a workspace-level entry here.
         {
-          title: "Analytics",
-          href: "/projects/analytics",
-          icon: ChartNoAxesColumn,
-          roles: REPORT_READERS,
+          title: "Timesheet",
+          href: "/projects/timesheet",
+          icon: Clock,
+          roles: WORKERS,
         },
+      ],
+    },
+    {
+      title: "Team Members",
+      items: [
+        // The roster of people in this workspace — everyone may see it.
+        { title: "Teams", href: "/team-members", icon: Users, roles: EVERYONE },
+        { title: "Messages", href: "/messages", icon: MessageSquare, roles: EVERYONE },
+        // Managing the teams themselves. Sits with the people group rather than
+        // under Administration, since that is what it is about.
+        { title: "All Teams", href: "/admin/teams", icon: UsersRound, roles: ADMINS },
       ],
     },
     {
       title: "Administration",
       items: [
-        // Same page as "Team Members" above, reached as management rather than
-        // as the roster. `members.invite` is owner/admin, matching ADMINS.
+        // The directory of *every* account, including people who are not in
+        // this workspace yet, so an admin can find someone to add.
+        // `members.invite` is owner/admin, matching ADMINS.
         { title: "Users", href: "/admin/users", icon: UserCog, roles: ADMINS },
-        { title: "Add User", href: "/admin/users/new", icon: UserPlus, roles: ADMINS },
-        { title: "Teams", href: "/admin/teams", icon: UsersRound, roles: ADMINS },
+        { title: "Add Users", href: "/admin/users/new", icon: UserPlus, roles: ADMINS },
         { title: "Roles", href: "/admin/users/roles", icon: ShieldCheck, roles: ADMINS },
-        { title: "Settings", href: "/settings", icon: Settings, roles: ADMINS },
-        // Owner-only, matching `billing.manage` — the one entry in the matrix
-        // that admins do not hold.
-        { title: "Billing", href: "/settings/billing", icon: CreditCard, roles: OWNERS },
+        // ADMINS, not EVERYONE. As EVERYONE it was the only item a member could
+        // see here, so they got an "Administration" heading with one entry
+        // under it. Switching workspaces is still available to every role
+        // through the switcher at the top of the sidebar.
+        { title: "Workspaces", href: "/workspaces", icon: Building2, roles: ADMINS },
       ],
     },
     {
-      title: "Account",
+      title: "Settings",
       items: [
         { title: "Profile", href: "/profile", icon: User, roles: EVERYONE },
-        { title: "Workspaces", href: "/workspaces", icon: Building2, roles: EVERYONE },
+        {
+          title: "Display & Appearance",
+          href: "/settings/appearance",
+          icon: Palette,
+          roles: EVERYONE,
+        },
       ],
     },
   ];
@@ -132,6 +148,9 @@ const FEATURE_ITEMS: Record<
 > = {
   tasks: { title: "Tasks", segment: "tasks", icon: ListTodo, roles: EVERYONE },
   campaigns: { title: "Campaigns", segment: "campaigns", icon: Megaphone, roles: EVERYONE },
+  // Still typed, but absent from PROJECT_FEATURES — so it is never offered in
+  // the picker and never appears in the nav. The route remains reachable by URL
+  // for any project that already had it stored.
   "landing-pages": {
     title: "Landing Pages",
     segment: "landing-pages",
@@ -145,8 +164,17 @@ const FEATURE_ITEMS: Record<
     // Logging time is `time.log`, which viewers and guests do not hold.
     roles: WORKERS,
   },
+  // Still typed, but absent from PROJECT_FEATURES — never offered in the
+  // picker and never shown in the nav. The route stays reachable by URL for
+  // any project that already had it stored.
   timesheet: { title: "Timesheet", segment: "timesheet", icon: Clock, roles: EVERYONE },
-  report: { title: "Report", segment: "report", icon: FileText, roles: REPORT_READERS },
+  spreadsheet: {
+    title: "Spreadsheets",
+    segment: "spreadsheet",
+    icon: Sheet,
+    roles: EVERYONE,
+  },
+  report: { title: "Reports", segment: "report", icon: FileText, roles: REPORT_READERS },
 };
 
 /**
@@ -198,7 +226,7 @@ export const bottomTabItems: NavItem[] = [
   { title: "Projects", href: "/projects", icon: FolderKanban, roles: EVERYONE },
   { title: "Tasks", href: "/projects/tasks", icon: ListTodo, roles: EVERYONE },
   { title: "Messages", href: "/messages", icon: MessageSquare, roles: EVERYONE },
-  { title: "People", href: "/admin/users", icon: Users, roles: EVERYONE },
+  { title: "People", href: "/team-members", icon: Users, roles: EVERYONE },
 ];
 
 /** Tabs a role may see, with count badges merged in. */
@@ -238,7 +266,25 @@ export function visibleSections(
   role: Role,
   projects: Pick<Project, "id" | "name" | "features">[],
   badges: Record<string, number> = {},
+  /**
+   * Pages this member may reach, from `resolvePages`. Omitted means "no
+   * per-user restriction", which is what every caller wanted before page
+   * assignment existed — so passing nothing keeps the old behaviour.
+   *
+   * Matching is by href: an entry whose href is in `APP_PAGES` but not in this
+   * list is dropped, so the sidebar never offers a link that would bounce the
+   * member to /forbidden. Project sub-pages carry no page key and are governed
+   * by `Project.features` instead, so they pass through untouched.
+   */
+  pages?: readonly AppPage[],
 ): NavSection[] {
+  const blockedHrefs =
+    pages === undefined
+      ? new Set<string>()
+      : new Set(
+          APP_PAGES.filter((page) => !pages.includes(page.key)).map((page) => page.href),
+        );
+
   // Filter children as well as top-level items, so what this returns is exactly
   // what the role may see — the renderer never has to re-check.
   const prepare = (item: NavItem): NavItem => {
@@ -256,7 +302,9 @@ export function visibleSections(
   return [...baseSections(), projectSection(projects)]
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.roles.includes(role)).map(prepare),
+      items: section.items
+        .filter((item) => item.roles.includes(role) && !blockedHrefs.has(item.href))
+        .map(prepare),
     }))
     .filter((section) => section.items.length > 0);
 }

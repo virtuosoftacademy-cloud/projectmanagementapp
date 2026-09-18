@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SignInForm } from "@/app/signin/signin-form";
 import { Card, CardContent } from "@/components/ui/card";
-import { APP_NAME } from "@/lib/domain";
+import { AppLogo } from "@/components/app-logo";
+import { getBranding } from "@/lib/queries";
 import { getSessionUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -12,19 +13,15 @@ export default async function SignInPage({ searchParams }: PageProps<"/signin">)
   if (user) redirect("/dashboard");
 
   const { from } = await searchParams;
+  const branding = await getBranding();
   const target = typeof from === "string" && from.startsWith("/") ? from : "/dashboard";
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
       <div className="w-full max-w-sm space-y-6">
-        <div className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-            {APP_NAME[0]}
-          </span>
-          <div>
-            <p className="font-semibold leading-tight">{APP_NAME}</p>
-            <p className="text-xs text-muted-foreground">Project workspace</p>
-          </div>
+        <div className="space-y-1">
+          <AppLogo branding={branding} />
+          <p className="text-xs text-muted-foreground">Project workspace</p>
         </div>
 
         <Card>

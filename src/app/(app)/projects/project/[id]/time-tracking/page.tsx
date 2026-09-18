@@ -6,9 +6,15 @@ import { TimesheetChart } from "@/components/dashboard/timesheet-chart";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TODAY, WEEKDAY_LABELS, getWeekDays } from "@/lib/domain";
+import { WEEKDAY_LABELS, getWeekDays, todayIso } from "@/lib/domain";
 import { can } from "@/lib/permissions";
-import { getMembers, getProject, getProjectStats } from "@/lib/queries";
+import {
+  getMembers,
+  getProject,
+  getProjectStats,
+  getRunningTimer,
+  getTimeSummary,
+} from "@/lib/queries";
 import { getSessionUser, requirePermission } from "@/lib/session";
 import { cn, formatDuration } from "@/lib/utils";
 
@@ -34,14 +40,19 @@ export default async function ProjectTimeTrackingPage({
 }: PageProps<"/projects/project/[id]/time-tracking">) {
   const viewer = await requirePermission("time.log");
   const { id } = await params;
+  // Resolved once on the server and threaded down, so the week grid and the
+  // client-side "Log Time" form agree on which day it is.
+  const today = todayIso();
 
   const project = await getProject(viewer.workspaceId, id);
   // A feature switched off is genuinely gone, not just hidden from the nav.
   if (!project || !project.features.includes("time-tracking")) notFound();
 
-  const [stats, members] = await Promise.all([
+  const [stats, members, running, summary] = await Promise.all([
     getProjectStats(viewer.workspaceId, project.id),
     getMembers(viewer.workspaceId),
+    getRunningTimer(viewer.workspaceId, viewer.id),
+    getTimeSummary(viewer.workspaceId, viewer.id),
   ]);
 
   const memberName = (userId: string) =>
@@ -57,7 +68,7 @@ export default async function ProjectTimeTrackingPage({
       estimateHours: task.estimateHours,
     }));
 
-  const week = getWeekDays(TODAY).map((date, index) => ({
+  const week = getWeekDays(today).map((date, index) => ({
     date: WEEKDAY_LABELS[index],
     hours: stats.entries
       .filter((entry) => entry.date === date)
@@ -81,6 +92,7 @@ export default async function ProjectTimeTrackingPage({
   return (
     <TimeLogs
       canLog={can(viewer.role, "time.log")}
+      today={today}
       tasks={openTasks}
       logs={stats.entries.map((entry) => {
         const task = taskFor(entry.taskId);
@@ -101,6 +113,9 @@ export default async function ProjectTimeTrackingPage({
       <ActiveTimer
         userName={viewer.name}
         tasks={openTasks.map((task) => ({ id: task.id, label: task.title }))}
+        running={running}
+        todayMinutes={summary.todayMinutes}
+        weekMinutes={summary.weekMinutes}
       />
 
       <Card className="shadow-none">

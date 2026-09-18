@@ -2,16 +2,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ShieldAlert } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { PERMISSION_LABELS, roleLabel, type Permission } from "@/lib/permissions";
+import { APP_PAGES, PERMISSION_LABELS, roleLabel, type Permission } from "@/lib/permissions";
 import { getSessionUser } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Not allowed" };
 
 export default async function ForbiddenPage({ searchParams }: PageProps<"/forbidden">) {
   const user = await getSessionUser();
-  const { need } = await searchParams;
+  const { need, page } = await searchParams;
   const permission = typeof need === "string" ? (need as Permission) : undefined;
   const label = permission ? PERMISSION_LABELS[permission] : undefined;
+
+  // `?page=` means their role allows it but an owner or admin has not assigned
+  // it to them — a different problem from lacking the permission, and a
+  // different fix, so it gets its own wording.
+  const pageEntry =
+    typeof page === "string" ? APP_PAGES.find((item) => item.key === page) : undefined;
 
   return (
     <main className="flex min-h-svh items-center justify-center p-6">
@@ -25,7 +31,12 @@ export default async function ForbiddenPage({ searchParams }: PageProps<"/forbid
               You don&apos;t have access
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {label ? (
+              {pageEntry ? (
+                <>
+                  <span className="font-medium">{pageEntry.label}</span> isn&apos;t assigned to
+                  your account.
+                </>
+              ) : label ? (
                 <>
                   This page needs the <span className="font-medium">{label}</span> permission.
                 </>
@@ -42,7 +53,9 @@ export default async function ForbiddenPage({ searchParams }: PageProps<"/forbid
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            Ask a workspace owner or admin to change your role, then sign out and back in.
+            {pageEntry
+              ? "Ask a workspace owner or admin to assign you this page. It takes effect immediately."
+              : "Ask a workspace owner or admin to change your role, then sign out and back in."}
           </p>
           <Link
             href="/dashboard"

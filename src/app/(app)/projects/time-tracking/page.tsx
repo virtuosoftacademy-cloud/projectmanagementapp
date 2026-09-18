@@ -5,30 +5,38 @@ import { TimesheetChart } from "@/components/dashboard/timesheet-chart";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { TODAY, WEEKDAY_LABELS, getWeekDays } from "@/lib/domain";
+import { WEEKDAY_LABELS, getWeekDays, todayIso } from "@/lib/domain";
 import { can } from "@/lib/permissions";
 import {
   getEntryDetails,
   getMemberVariance,
   getMembers,
   getProjects,
+  getRunningTimer,
   getTasks,
   getTimeEntries,
+  getTimeSummary,
 } from "@/lib/queries";
-import { requirePermission } from "@/lib/session";
+import { projectScope, requirePage } from "@/lib/session";
 import { cn, formatDuration } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Time Tracking" };
 
 export default async function TimeTrackingPage() {
-  const viewer = await requirePermission("time.log");
+  const viewer = await requirePage("time-tracking");
+  // Resolved once on the server and threaded down, so the week grid, the log
+  // table and the client-side "Log Time" form all agree on which day it is
+  // even when the browser sits in a different timezone.
+  const today = todayIso();
 
-  const [entries, tasks, projects, members, allEntries] = await Promise.all([
+  const [entries, tasks, projects, members, allEntries, running, summary] = await Promise.all([
     getEntryDetails(viewer.workspaceId),
     getTasks(viewer.workspaceId),
-    getProjects(viewer.workspaceId),
+    getProjects(viewer.workspaceId, await projectScope()),
     getMembers(viewer.workspaceId),
     getTimeEntries(viewer.workspaceId),
+    getRunningTimer(viewer.workspaceId, viewer.id),
+    getTimeSummary(viewer.workspaceId, viewer.id),
   ]);
 
   const openTasks = tasks
@@ -40,7 +48,7 @@ export default async function TimeTrackingPage() {
       estimateHours: task.estimateHours,
     }));
 
-  const week = getWeekDays(TODAY).map((date, index) => ({
+  const week = getWeekDays(today).map((date, index) => ({
     date: WEEKDAY_LABELS[index],
     hours: allEntries
       .filter((entry) => entry.date === date)
@@ -59,6 +67,7 @@ export default async function TimeTrackingPage() {
   return (
     <TimeLogs
       canLog={can(viewer.role, "time.log")}
+      today={today}
       tasks={openTasks}
       logs={entries.map((entry) => ({
         id: entry.id,
@@ -77,6 +86,9 @@ export default async function TimeTrackingPage() {
           id: task.id,
           label: `${task.title} · ${task.projectName}`,
         }))}
+        running={running}
+        todayMinutes={summary.todayMinutes}
+        weekMinutes={summary.weekMinutes}
       />
 
       <Card className="shadow-none">

@@ -12,6 +12,10 @@ import { ActivityTab } from "@/components/dashboard/activity-tab";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
 import { ProjectsTab } from "@/components/dashboard/projects-tab";
+import {
+  TeamBreakdown,
+  type TeamBreakdownRow,
+} from "@/components/dashboard/team-breakdown";
 import { TeamTab } from "@/components/dashboard/team-tab";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,22 +28,24 @@ import {
   getMetrics,
   getProjectStats,
   getProjects,
+  getTeams,
 } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { projectScope, requirePage } from "@/lib/session";
 import { formatPkr } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Admin Dashboard",
-  description: "Workspace overview: projects, tasks, hours, and billing.",
+  description: "Workspace overview: projects, tasks and hours.",
 };
 
 export default async function DashboardPage() {
-  const viewer = await requireUser("/dashboard");
-  const [metrics, projects, members, activity] = await Promise.all([
+  const viewer = await requirePage("dashboard");
+  const [metrics, projects, members, activity, teams] = await Promise.all([
     getMetrics(viewer.workspaceId),
-    getProjects(viewer.workspaceId),
+    getProjects(viewer.workspaceId, await projectScope()),
     getMembers(viewer.workspaceId),
     getActivity(viewer.workspaceId),
+    getTeams(viewer.workspaceId),
   ]);
 
   const projectRows = await Promise.all(
@@ -54,6 +60,53 @@ export default async function DashboardPage() {
       stats: await getMemberStats(viewer.workspaceId, member.id),
     })),
   );
+
+  /**
+   * Per-team totals, summed from the project and member data already loaded
+   * above rather than queried again — so the roll-up and the cards below it
+   * always agree.
+   *
+   * People and projects with no team are collected into one trailing bucket,
+   * which is only shown when it actually holds something.
+   */
+  const unassigned = {
+    memberCount: members.filter((member) => member.teamId === null).length,
+    projects: projectRows.filter((row) => row.project.teamId === null),
+  };
+
+  const teamRows: TeamBreakdownRow[] = [
+    ...teams.map((team) => {
+      const owned = projectRows.filter((row) => row.project.teamId === team.id);
+      return {
+        id: team.id,
+        name: team.name,
+        color: team.color,
+        memberCount: members.filter((member) => member.teamId === team.id).length,
+        projectCount: owned.length,
+        tasksDone: owned.reduce((sum, row) => sum + row.stats.done, 0),
+        tasksTotal: owned.reduce((sum, row) => sum + row.stats.taskCount, 0),
+        hours: owned.reduce((sum, row) => sum + row.stats.hours, 0),
+        cost: owned.reduce((sum, row) => sum + row.stats.cost, 0),
+        unassigned: false,
+      };
+    }),
+    ...(unassigned.memberCount > 0 || unassigned.projects.length > 0
+      ? [
+          {
+            id: "__unassigned",
+            name: "No team",
+            color: "transparent",
+            memberCount: unassigned.memberCount,
+            projectCount: unassigned.projects.length,
+            tasksDone: unassigned.projects.reduce((sum, row) => sum + row.stats.done, 0),
+            tasksTotal: unassigned.projects.reduce((sum, row) => sum + row.stats.taskCount, 0),
+            hours: unassigned.projects.reduce((sum, row) => sum + row.stats.hours, 0),
+            cost: unassigned.projects.reduce((sum, row) => sum + row.stats.cost, 0),
+            unassigned: true,
+          },
+        ]
+      : []),
+  ];
 
   return (
     <div className="space-y-6">
@@ -136,7 +189,19 @@ export default async function DashboardPage() {
             content: <OverviewTab workspaceId={viewer.workspaceId} />,
           },
           { value: "projects", label: "Projects", content: <ProjectsTab rows={projectRows} /> },
-          { value: "team", label: "Team", content: <TeamTab rows={memberRows} /> },
+          {
+            value: "team",
+            label: "Team",
+            content: (
+              <div className="space-y-6">
+                <TeamBreakdown rows={teamRows} />
+                <div className="space-y-3">
+                  <h2 className="text-sm font-semibold">By person</h2>
+                  <TeamTab rows={memberRows} />
+                </div>
+              </div>
+            ),
+          },
           { value: "activity", label: "Activity", content: <ActivityTab entries={activity} /> },
         ]}
       />

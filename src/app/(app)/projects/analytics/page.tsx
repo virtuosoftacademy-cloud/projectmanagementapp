@@ -6,13 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDay } from "@/lib/domain";
 import { getEntryDetails, getHoursByDay, getMetrics } from "@/lib/queries";
-import { requirePermission } from "@/lib/session";
+import { requirePage } from "@/lib/session";
 import { cn, formatDuration, formatPkr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Analytics" };
 
 export default async function AnalyticsPage() {
-  const viewer = await requirePermission("reports.view");
+  const viewer = await requirePage("analytics");
 
   const [metrics, entries, hoursByDay] = await Promise.all([
     getMetrics(viewer.workspaceId),

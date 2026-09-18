@@ -11,6 +11,16 @@ datasource db {
   provider = "mysql"
 }
 
+/// How the app renders for one person. Stored per account so the choice
+/// follows them to another browser or device, unlike a local preference.
+/// SYSTEM means "no class on <html>", which lets the prefers-color-scheme
+/// block in globals.css decide.
+enum Theme {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
 /// Workspace roles, ordered most to least privileged. Scoped per membership,
 /// not per user — the same person can hold a different role in each workspace.
 enum Role {
@@ -25,10 +35,10 @@ enum Role {
 /// A tenant. Every Team, Project, Message and ActivityEntry belongs to
 /// exactly one workspace; a User can belong to several via WorkspaceMember.
 model Workspace {
-  id          String  @id @default(cuid())
+  id          String @id @default(cuid())
   name        String
-  slug        String  @unique
-  description String  @default("") @db.Text
+  slug        String @unique
+  description String @default("") @db.Text
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -38,6 +48,8 @@ model Workspace {
   projects        Project[]
   activity        ActivityEntry[]
   messages        Message[]
+  customRoles     CustomRole[]
+  labels          Label[]
   lastActiveUsers User[]            @relation("LastWorkspace")
 
   @@index([slug])
@@ -49,6 +61,9 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
+  /// R2 object key behind `image`, kept so the old object can be deleted when
+  /// the photo is replaced. Null when `image` is external or unset.
+  imageKey      String?
 
   /// bcrypt hash. Null for accounts that only sign in through OAuth.
   passwordHash String?
@@ -64,6 +79,9 @@ model User {
   joinedAt        DateTime  @default(now())
   lastLoginAt     DateTime?
   disabledAt      DateTime?
+  /// Light by default: a deliberate, predictable starting point rather than
+  /// inheriting whatever the operating system happens to be set to.
+  theme           Theme     @default(LIGHT)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -81,9 +99,49 @@ model User {
   activity             ActivityEntry[]
   sentMessages         Message[]         @relation("MessageSender")
   receivedMessages     Message[]         @relation("MessageRecipient")
+  assignedSheets       ProjectSheet[]    @relation("SheetAssignee")
+  runningTimer         TaskTimer?
+  uploadedAttachments  TaskAttachment[]  @relation("AttachmentUploader")
 
   @@index([teamId])
   @@index([lastWorkspaceId])
+}
+
+/// A role an owner or admin defined, on top of the built-in `Role` enum.
+///
+/// `inheritsFrom` is mandatory and is what every role-based check reads: a
+/// custom role IS its base role as far as guards are concerned, and the
+/// `permissions` array only narrows what that base role grants. Without it a
+/// holder would resolve to the least-privileged role and every gated route
+/// would refuse them while the role still looked correct in the UI.
+model CustomRole {
+  id          String @id @default(cuid())
+  workspaceId String
+  /// Lowercase key, unique per workspace. Never collides with a base role name.
+  name        String
+  label       String
+  description String @default("") @db.Text
+
+  /// Permission keys from lib/permissions.ts, as a string array.
+  permissions Json
+
+  inheritsFrom Role
+  isActive     Boolean @default(true)
+  /// Reserved for roles the app ships; user-made roles are always false, which
+  /// is what keeps Edit and Delete enabled for them.
+  isSystem     Boolean @default(false)
+
+  createdById String?
+  updatedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   WorkspaceMember[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
 }
 
 /// A user's membership — and role — in one workspace. Role lives here, not
@@ -95,11 +153,23 @@ model WorkspaceMember {
   role        Role     @default(MEMBER)
   joinedAt    DateTime @default(now())
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Set when this member holds a custom role. `role` still carries the base
+  /// role it inherits from, so a query filtering on `role` stays correct
+  /// without having to join.
+  customRoleId String?
+
+  /// Pages this member may reach, as a string array of AppPage keys. Null means
+  /// "never assigned" — the role's own pages apply. Assignment only ever
+  /// narrows what the role grants; see `resolvePages` in lib/permissions.ts.
+  pages Json?
+
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customRole CustomRole? @relation(fields: [customRoleId], references: [id], onDelete: SetNull)
 
   @@id([workspaceId, userId])
   @@index([userId])
+  @@index([customRoleId])
 }
 
 enum ProjectStatus {
@@ -164,19 +234,19 @@ model Team {
 }
 
 model Project {
-  id          String        @id @default(cuid())
-  workspaceId String
-  name        String
-  description String        @db.Text
-  status      ProjectStatus @default(PLANNING)
-  color       String
+  id              String        @id @default(cuid())
+  workspaceId     String
+  name            String
+  description     String        @db.Text
+  status          ProjectStatus @default(PLANNING)
+  color           String
   /// Owning team. Deleting a team is blocked while it still owns projects.
   /// Nullable, so `workspaceId` is stored directly rather than derived.
-  teamId      String?
-  startDate   DateTime?     @db.Date
-  endDate     DateTime?     @db.Date
+  teamId          String?
+  startDate       DateTime?     @db.Date
+  endDate         DateTime?     @db.Date
   /// Whether new tasks default to billable.
-  defaultBillable Boolean   @default(true)
+  defaultBillable Boolean       @default(true)
   /// Enabled sub-pages, as a string array of ProjectFeature keys. Null means
   /// "never configured" — the app falls back to DEFAULT_PROJECT_FEATURES, so
   /// projects that predate this column keep the pages they already showed.
@@ -191,9 +261,45 @@ model Project {
   tasks     Task[]
   campaigns Campaign[]
   sections  LandingSection[]
+  sheets    ProjectSheet[]
 
   @@index([workspaceId])
   @@index([teamId])
+}
+
+/// A free-form spreadsheet. A project may have several.
+///
+/// Deliberately unrelated to Task: a blank grid people type into, not a view
+/// of anything else in the app. Cells are a row-major 2-D array of strings —
+/// a sheet this size is read and written whole, so a row-per-cell table would
+/// buy nothing and cost a join.
+model ProjectSheet {
+  id        String @id @default(cuid())
+  projectId String
+  name      String
+
+  /// `string[][]`, row-major. Every cell is a string; blanks are "".
+  cells    Json
+  /// Kept alongside the data so an empty grid still has a shape.
+  rowCount Int  @default(20)
+  colCount Int  @default(8)
+
+  /// Who is responsible for this sheet. Nullable — a sheet need not be
+  /// anyone's in particular. SetNull so removing a person leaves the sheet.
+  assigneeId String?
+  /// Manual order within the project, so tabs keep a stable, chosen sequence.
+  position   Int     @default(0)
+
+  updatedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee User?   @relation("SheetAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([assigneeId])
 }
 
 model ProjectMember {
@@ -209,26 +315,35 @@ model ProjectMember {
 }
 
 model Task {
-  id        String     @id @default(cuid())
-  projectId String
-  title     String
-  status    TaskStatus @default(TODO)
-  priority  Priority   @default(MEDIUM)
+  id              String     @id @default(cuid())
+  projectId       String
+  title           String
+  description     String     @default("") @db.Text
+  status          TaskStatus @default(TODO)
+  priority        Priority   @default(MEDIUM)
   /// Estimate in whole minutes — durations are never fractional here.
-  estimateMinutes Int  @default(0)
-  billable  Boolean    @default(true)
-  dueDate   DateTime?  @db.Date
-  subtasksTotal Int    @default(0)
-  subtasksDone  Int    @default(0)
+  estimateMinutes Int        @default(0)
+  billable        Boolean    @default(true)
+  dueDate         DateTime?  @db.Date
+  subtasksTotal   Int        @default(0)
+  subtasksDone    Int        @default(0)
   /// Manual ordering within a board column.
-  position  Int        @default(0)
+  position        Int        @default(0)
+
+  /// Set when the task is archived. Archived tasks leave the board but keep
+  /// their time entries, so history stays intact — this is why archiving is
+  /// offered instead of deletion.
+  archivedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignees TaskAssignee[]
-  entries   TimeEntry[]
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignees   TaskAssignee[]
+  entries     TimeEntry[]
+  labels      TaskLabel[]
+  attachments TaskAttachment[]
+  timers      TaskTimer[]
 
   @@index([projectId])
   @@index([status])
@@ -247,14 +362,19 @@ model TaskAssignee {
 }
 
 model TimeEntry {
-  id      String   @id @default(cuid())
-  date    DateTime @db.Date
-  userId  String
-  taskId  String
+  id        String    @id @default(cuid())
+  date      DateTime  @db.Date
+  userId    String
+  taskId    String
   /// Logged time in whole minutes.
-  minutes Int
-  billable Boolean @default(true)
-  note    String   @default("") @db.Text
+  minutes   Int
+  /// The wall-clock span this entry covers, when it is known: a timer always
+  /// records both, a duration-only manual entry neither. `minutes` stays the
+  /// authoritative duration so every existing sum keeps working unchanged.
+  startedAt DateTime?
+  endedAt   DateTime?
+  billable  Boolean   @default(true)
+  note      String    @default("") @db.Text
 
   createdAt DateTime @default(now())
 
@@ -373,4 +493,96 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+/// The one timer a person currently has running.
+///
+/// Kept apart from TimeEntry rather than modelled as an entry with no end: the
+/// unique index on `userId` is what makes "one timer per user" an invariant the
+/// database enforces instead of a rule the UI hopes to hold, and it keeps
+/// TimeEntry meaning "work that actually happened" — so every existing total,
+/// report and timesheet stays correct without learning about running timers.
+model TaskTimer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  taskId    String
+  /// Elapsed time is always derived from this, never counted up in the client,
+  /// so a refresh — or a different device — resumes at the right number.
+  startedAt DateTime @default(now())
+  note      String   @default("") @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+}
+
+/// A tag that can be put on tasks. Scoped to a workspace, so one tenant's
+/// labels never leak into another's picker.
+model Label {
+  id          String @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String @default("#64748B")
+
+  createdAt DateTime @default(now())
+
+  workspace Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks     TaskLabel[]
+
+  @@unique([workspaceId, name])
+}
+
+model TaskLabel {
+  taskId  String
+  labelId String
+
+  task  Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
+}
+
+/// An image attached to a task, stored in Cloudflare R2.
+///
+/// Only the object key is persisted, never the full URL: the public URL is that
+/// key prefixed with `NEXT_PUBLIC_R2_PUBLIC_URL`, so putting the bucket behind
+/// a different domain is a config change rather than a data migration.
+///
+/// `size`, `width` and `height` describe the object as *stored* — after sharp
+/// has resized and re-encoded it — not the file that was chosen.
+model TaskAttachment {
+  id           String  @id @default(cuid())
+  taskId       String
+  objectKey    String  @unique
+  filename     String
+  mimeType     String
+  size         Int
+  width        Int?
+  height       Int?
+  uploadedById String?
+
+  createdAt DateTime @default(now())
+
+  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploadedBy User? @relation("AttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+}
+
+/// The deployment's own branding: logo, dark-mode logo, favicon.
+///
+/// A single row, pinned to id "app". Deliberately not per-workspace: the
+/// favicon and the sign-in screen are rendered before anyone has chosen a
+/// workspace — or signed in at all — so there is no tenant to read it from.
+model AppSetting {
+  id String @id @default("app")
+
+  /// R2 object keys. Null means "fall back to the built-in wordmark".
+  logoLightKey String?
+  logoDarkKey  String?
+  faviconKey   String?
+
+  updatedAt DateTime @updatedAt
 }

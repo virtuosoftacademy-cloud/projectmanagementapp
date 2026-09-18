@@ -21,6 +21,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel = "Delete",
+  blocked = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -28,6 +29,12 @@ export function ConfirmDialog({
   title: string;
   description: string;
   confirmLabel?: string;
+  /**
+   * The action cannot proceed. The dialog still opens and still explains why —
+   * that is the point of opening it — but the destructive button is replaced
+   * by a plain dismiss, so there is nothing to click that would fail.
+   */
+  blocked?: boolean;
 }) {
   return (
     <AlertDialog open={open} onOpenChange={(next) => (next ? undefined : onClose())}>
@@ -37,13 +44,19 @@ export function ConfirmDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            className={cn(buttonVariants({ variant: "destructive" }))}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </AlertDialogAction>
+          {blocked ? (
+            <AlertDialogCancel>Close</AlertDialogCancel>
+          ) : (
+            <>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className={cn(buttonVariants({ variant: "destructive" }))}
+                onClick={onConfirm}
+              >
+                {confirmLabel}
+              </AlertDialogAction>
+            </>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

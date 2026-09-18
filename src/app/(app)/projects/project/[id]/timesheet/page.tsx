@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { Download } from "lucide-react";
 import { WeeklyTimesheet, type TimesheetRow } from "@/components/projects/weekly-timesheet";
 import { Button } from "@/components/ui/button";
-import { TODAY } from "@/lib/domain";
+import { todayIso } from "@/lib/domain";
 import { getProject, getProjectStats } from "@/lib/queries";
 import { getSessionUser, requireUser } from "@/lib/session";
 
@@ -51,7 +51,7 @@ export default async function TimesheetPage({
         </Button>
       </div>
 
-      <WeeklyTimesheet rows={rows} initialWeek={TODAY} />
+      <WeeklyTimesheet rows={rows} initialWeek={todayIso()} />
     </div>
   );
 }

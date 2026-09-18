@@ -2,21 +2,28 @@ import type { Metadata } from "next";
 import { ShieldCheck, UserCheck, UserX, Users } from "lucide-react";
 import { UsersTable } from "@/components/admin/users-table";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { getAdminUsers, getUserStats } from "@/lib/admin";
+import { getAdminUsers, getCustomRoles, getUserStats } from "@/lib/admin";
 import { can } from "@/lib/permissions";
 import { getTeams } from "@/lib/queries";
-import { requireUser } from "@/lib/session";
+import { requirePage } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Users" };
 
+/**
+ * The account directory. Owner/admin only — `members.invite`.
+ *
+ * It was `requireUser` while this doubled as the everyone-can-see roster. That
+ * roster now lives at `/team-members`, leaving this as a management screen: it
+ * lists *every* account in the system, including people in other workspaces,
+ * which is not something a member, viewer or guest should be able to enumerate.
+ */
 export default async function AdminUsersPage() {
-  // Everyone signed in can see the roster; the management controls below are
-  // gated per permission, and every action re-checks server-side.
-  const viewer = await requireUser("/admin/users");
-  const [users, stats, teams] = await Promise.all([
+  const viewer = await requirePage("users");
+  const [users, stats, teams, customRoles] = await Promise.all([
     getAdminUsers(viewer.workspaceId),
     getUserStats(viewer.workspaceId),
     getTeams(viewer.workspaceId),
+    getCustomRoles(viewer.workspaceId),
   ]);
 
   const canInvite = can(viewer.role, "members.invite");
@@ -68,7 +75,10 @@ export default async function AdminUsersPage() {
         users={users}
         teams={teams}
         canInvite={canInvite}
+        canAssignRoles={can(viewer.role, "workspace.settings")}
+        customRoles={customRoles}
         canManageRoles={can(viewer.role, "roles.manage")}
+        canDelete={can(viewer.role, "members.delete")}
         currentUserId={viewer.id}
       />
     </div>

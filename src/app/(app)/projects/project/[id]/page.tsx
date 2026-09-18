@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { formatDay } from "@/lib/domain";
 import { can } from "@/lib/permissions";
-import { getMembers, getProject, getProjectStats } from "@/lib/queries";
+import { getMembers, getProject, getProjectStats, getTeams } from "@/lib/queries";
 import { getSessionUser, requireUser } from "@/lib/session";
 import { statusVariant, taskStatusColor } from "@/lib/status";
 import { formatPkr } from "@/lib/utils";
@@ -31,9 +31,10 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
   const project = await getProject(viewer.workspaceId, id);
   if (!project) notFound();
 
-  const [stats, members] = await Promise.all([
+  const [stats, members, teams] = await Promise.all([
     getProjectStats(viewer.workspaceId, project.id),
     getMembers(viewer.workspaceId),
+    getTeams(viewer.workspaceId),
   ]);
 
   const memberIds = new Set(project.members.map((person) => person.id));
@@ -146,6 +147,8 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
           projectId={project.id}
           rows={rows}
           candidates={members.filter((member) => !memberIds.has(member.id))}
+          teams={teams}
+          owningTeamId={project.teamId}
           canEdit={can(viewer.role, "projects.edit")}
         />
       </div>

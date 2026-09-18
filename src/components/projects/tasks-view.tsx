@@ -3,22 +3,30 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, Tag } from "lucide-react";
 import { AvatarStack } from "@/components/avatar-stack";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { LabelsManager } from "@/components/projects/labels-manager";
 import { TaskDialog } from "@/components/projects/task-dialog";
+import {
+  EMPTY_FILTER,
+  TaskFilters,
+  filterTasks,
+  type TaskFilter,
+} from "@/components/projects/task-filters";
 import { createTaskAction } from "@/lib/actions";
 import {
   TASK_STATUSES,
   formatDay,
+  type Label,
   type Member,
   type Project,
   type Task,
 } from "@/lib/domain";
 import { priorityVariant } from "@/lib/status";
-import { cn } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 type TaskRow = Task & { projectName: string };
 
@@ -26,18 +34,28 @@ export function TasksView({
   tasks,
   projects,
   members,
+  labels,
+  labelUsage,
   canManage,
 }: {
+  /** Live and archived; the filter decides which are shown. */
   tasks: TaskRow[];
   projects: Project[];
   members: Member[];
+  labels: Label[];
+  /** Tasks per label, for the delete confirmation in the labels dialog. */
+  labelUsage: Record<string, number>;
   canManage: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [view, setView] = useState<"board" | "list">("board");
   const [creating, setCreating] = useState(false);
+  const [managingLabels, setManagingLabels] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER);
+
+  const visible = filterTasks(tasks, filter);
 
   return (
     <div className="space-y-6">
@@ -70,10 +88,21 @@ export function TasksView({
             ))}
           </div>
           {canManage ? (
-            <Button size="sm" onClick={() => setCreating(true)} disabled={pending}>
-              <Plus className="h-4 w-4" />
-              Add Task
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setManagingLabels(true)}
+                disabled={pending}
+              >
+                <Tag className="h-4 w-4" />
+                Labels
+              </Button>
+              <Button size="sm" onClick={() => setCreating(true)} disabled={pending}>
+                <Plus className="h-4 w-4" />
+                Add Task
+              </Button>
+            </>
           ) : null}
         </div>
       </div>
@@ -84,7 +113,16 @@ export function TasksView({
         </p>
       ) : null}
 
-      {view === "board" ? <Board tasks={tasks} /> : <List tasks={tasks} />}
+      <TaskFilters
+        filter={filter}
+        onChange={setFilter}
+        members={members}
+        labels={labels}
+        resultCount={visible.length}
+        totalCount={tasks.length}
+      />
+
+      {view === "board" ? <Board tasks={visible} /> : <List tasks={visible} />}
 
       <TaskDialog
         key={String(creating)}
@@ -103,6 +141,13 @@ export function TasksView({
             }
           });
         }}
+      />
+
+      <LabelsManager
+        open={managingLabels}
+        onClose={() => setManagingLabels(false)}
+        labels={labels}
+        usage={labelUsage}
       />
     </div>
   );
@@ -128,13 +173,39 @@ function Board({ tasks }: { tasks: TaskRow[] }) {
                   className="shadow-none transition-colors hover:border-primary/30"
                 >
                   <CardContent className="space-y-2 p-3">
-                    <p className="text-sm font-medium">{task.title}</p>
+                    <p className="text-sm font-medium">
+                      <Link
+                        href={`/projects/project/${task.projectId}/tasks/${task.id}`}
+                        className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {task.title}
+                      </Link>
+                      {task.archived ? (
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          archived
+                        </Badge>
+                      ) : null}
+                    </p>
                     <Link
                       href={`/projects/project/${task.projectId}`}
                       className="block text-xs text-muted-foreground hover:underline"
                     >
                       {task.projectName}
                     </Link>
+                    {task.labels.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {task.labels.map((label) => (
+                          <Badge
+                            key={label.id}
+                            variant="outline"
+                            className="px-1.5 text-[10px]"
+                            style={{ borderColor: label.color }}
+                          >
+                            {label.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
                     <div className="flex items-center justify-between gap-2">
                       <Badge variant={priorityVariant[task.priority]} className="capitalize">
                         {task.priority}
@@ -143,7 +214,7 @@ function Board({ tasks }: { tasks: TaskRow[] }) {
                     </div>
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>{task.dueDate ? `Due ${formatDay(task.dueDate)}` : "No due date"}</span>
-                      <span>{task.subtasksTotal ?? 0} sub-tasks</span>
+                      <span className="font-mono">{formatDuration(task.trackedHours)}</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -174,17 +245,23 @@ function List({ tasks }: { tasks: TaskRow[] }) {
                 <th className="px-4 py-2 font-medium">Priority</th>
                 <th className="px-4 py-2 font-medium">Assignee</th>
                 <th className="px-4 py-2 font-medium">Due Date</th>
+                <th className="px-4 py-2 text-right font-medium">Tracked</th>
               </tr>
             </thead>
             <tbody className="[&_tr:last-child]:border-0">
               {tasks.map((task) => (
                 <tr key={task.id} className="border-b transition-colors hover:bg-muted/50">
                   <td className="px-4 py-2">
-                    {task.title}
-                    {task.subtasksTotal ? (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        ({task.subtasksTotal} sub-tasks)
-                      </span>
+                    <Link
+                      href={`/projects/project/${task.projectId}/tasks/${task.id}`}
+                      className="hover:underline"
+                    >
+                      {task.title}
+                    </Link>
+                    {task.archived ? (
+                      <Badge variant="outline" className="ml-2 text-[10px]">
+                        archived
+                      </Badge>
                     ) : null}
                   </td>
                   <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
@@ -199,6 +276,9 @@ function List({ tasks }: { tasks: TaskRow[] }) {
                   </td>
                   <td className="whitespace-nowrap px-4 py-2 font-mono">
                     {task.dueDate ? formatDay(task.dueDate) : "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-2 text-right font-mono">
+                    {formatDuration(task.trackedHours)}
                   </td>
                 </tr>
               ))}

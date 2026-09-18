@@ -5,19 +5,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/generated/prisma/enums";
 
-/**
- * Auth.js v5 configuration.
- *
- * Sessions are JWTs — the Credentials provider cannot use database sessions —
- * so the role is stamped into the token at sign-in and copied onto
- * `session.user` on every read. Authorization then never needs a second query.
- */
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/signin", error: "/signin" },
-  // Self-hosted (not Vercel), so there's no fixed AUTH_URL — trust the
-  // incoming Host header instead of rejecting production requests outright.
   trustHost: true,
   providers: [
     Credentials({
@@ -33,21 +24,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!email || !password) return null;
 
         const user = await prisma.user.findUnique({ where: { email } });
-        // Compare even when the user is missing so a bad email and a bad
-        // password take the same amount of time.
         const hash = user?.passwordHash ?? "$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin";
         const ok = await bcrypt.compare(password, hash);
 
         if (!user || !user.passwordHash || !ok || user.disabledAt) return null;
 
-        // Resume into the workspace this user left off in, if they're still a
-        // member of it; otherwise their earliest membership.
-        //
-        // No membership is NOT a failed sign-in: the credentials were correct,
-        // the account simply has nowhere to land yet. Rejecting here used to
-        // report "that email and password did not match", which was untrue, and
-        // made the first workspace impossible to create through the UI.
-        // `requireUser` sends these sessions to /onboarding instead.
         const membership =
           (user.lastWorkspaceId &&
             (await prisma.workspaceMember.findUnique({

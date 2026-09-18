@@ -11,6 +11,22 @@
  */
 
 export type Role = "owner" | "admin" | "manager" | "member" | "viewer" | "guest";
+
+/**
+ * How the app renders for one person, stored on their account.
+ *
+ * `"system"` deliberately means *no* class on `<html>` — the
+ * `prefers-color-scheme` block in globals.css is what resolves it, so the
+ * server never has to guess what the browser will report.
+ */
+export type Theme = "light" | "dark" | "system";
+
+export const THEMES: { value: Theme; label: string; hint: string }[] = [
+  { value: "light", label: "Light", hint: "Soft slate background, warm ivory cards." },
+  { value: "dark", label: "Dark", hint: "Near-black background, dark slate cards." },
+  { value: "system", label: "System", hint: "Follows your operating system setting." },
+];
+
 export type ProjectStatus = "active" | "planning" | "on-hold" | "completed";
 export type TaskStatus = "todo" | "in-progress" | "in-review" | "done";
 export type Priority = "low" | "medium" | "high" | "urgent";
@@ -36,6 +52,7 @@ export type ProjectFeature =
   | "landing-pages"
   | "time-tracking"
   | "timesheet"
+  | "spreadsheet"
   | "report";
 
 /** The minimum needed to render someone: avatar, name, link. */
@@ -43,6 +60,8 @@ export type Person = {
   id: string;
   name: string;
   email: string;
+  /** Profile photo URL, or null for the initials fallback. */
+  image: string | null;
 };
 
 export type Member = Person & {
@@ -61,12 +80,36 @@ export type Workspace = {
   description: string;
 };
 
+/**
+ * One spreadsheet in a project, without its cells — enough to draw a tab.
+ *
+ * A project may hold several; each is named, and may be assigned to somebody.
+ */
+export type SheetSummary = {
+  id: string;
+  name: string;
+  assignee: Person | null;
+  updatedAt: string;
+};
+
+/** A sheet with its contents. */
+export type SheetDetail = SheetSummary & {
+  /** Row-major `string[][]`, always exactly `rowCount` × `colCount`. */
+  cells: string[][];
+  rowCount: number;
+  colCount: number;
+};
+
 /** A workspace as it appears in the switcher — with the caller's role in it. */
 export type WorkspaceSummary = {
   id: string;
   name: string;
   slug: string;
   role: Role;
+  /** Shown when confirming deletion, and what blocks it. */
+  projectCount: number;
+  /** Members whose account can still sign in — the caller included. */
+  activeUserCount: number;
 };
 
 export type Team = {
@@ -94,18 +137,32 @@ export type Project = {
   members: Person[];
 };
 
+/** A tag that can be put on tasks. Scoped to one workspace. */
+export type Label = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type Task = {
   id: string;
   title: string;
+  description: string;
   projectId: string;
   status: TaskStatus;
   priority: Priority;
   assignees: Person[];
+  labels: Label[];
   estimateHours: number;
   billable: boolean;
   dueDate: string | null;
   subtasksTotal: number;
   subtasksDone: number;
+  /** Hours logged against this task by everyone, from its time entries. */
+  trackedHours: number;
+  attachmentCount: number;
+  /** Archived tasks keep their history but leave the board. */
+  archived: boolean;
 };
 
 export type TimeEntry = {
@@ -116,6 +173,63 @@ export type TimeEntry = {
   hours: number;
   billable: boolean;
   note: string;
+  /**
+   * The wall-clock span, when it is known. A timer records both; a manual
+   * entry given only as a duration has neither. `hours` is authoritative
+   * either way — these are for display and for editing the original times.
+   */
+  startedAt: string | null;
+  endedAt: string | null;
+};
+
+/** A time entry with the person who logged it, as the task detail lists them. */
+export type TaskEntry = TimeEntry & { user: Person };
+
+/**
+ * The timer a person currently has running. At most one exists per user.
+ *
+ * Carries `startedAt` rather than an elapsed count: the client derives the
+ * number it shows, so a refresh resumes at the right place instead of at zero.
+ */
+export type RunningTimer = {
+  taskId: string;
+  taskTitle: string;
+  projectId: string;
+  projectName: string;
+  startedAt: string;
+  note: string;
+};
+
+/**
+ * An image attached to a task. The bytes live in Cloudflare R2, not here.
+ *
+ * `url` is derived from `objectKey` in the query layer rather than stored, so
+ * the bucket's public domain lives in one place. `size` and the dimensions
+ * describe the object *as stored*, after sharp has resized and re-encoded it.
+ */
+export type Attachment = {
+  id: string;
+  taskId: string;
+  objectKey: string;
+  url: string;
+  filename: string;
+  mimeType: string;
+  /** Bytes. */
+  size: number;
+  width: number | null;
+  height: number | null;
+  uploadedBy: Person | null;
+  createdAt: string;
+};
+
+/**
+ * The deployment's branding, as URLs ready to render. Null means no image has
+ * been uploaded and the built-in wordmark should be used instead.
+ */
+export type Branding = {
+  logoLight: string | null;
+  logoDark: string | null;
+  favicon: string | null;
 };
 
 export type Campaign = {
@@ -201,23 +315,18 @@ export const CAMPAIGN_STATUSES: CampaignStatus[] = ["draft", "active", "paused",
  */
 export const PROJECT_FEATURES: { key: ProjectFeature; label: string; hint: string }[] = [
   { key: "tasks", label: "Tasks", hint: "Kanban board for this project's work." },
-  { key: "campaigns", label: "Campaigns", hint: "Marketing campaigns and their budgets." },
-  {
-    key: "landing-pages",
-    label: "Landing Pages",
-    hint: "Build page sections for this project.",
-  },
   {
     key: "time-tracking",
     label: "Time Tracking",
     hint: "Log time against this project's tasks, with variance per member.",
   },
+  { key: "campaigns", label: "Campaigns", hint: "Marketing campaigns and their budgets." },
   {
-    key: "timesheet",
-    label: "Timesheet",
-    hint: "Week-by-week grid of hours per member.",
+    key: "spreadsheet",
+    label: "Spreadsheets",
+    hint: "Free-form grids for this project — name them, assign them, export to CSV.",
   },
-  { key: "report", label: "Report", hint: "Cost, hours and status summary." },
+  { key: "report", label: "Reports", hint: "Cost, hours and status summary." },
 ];
 
 /** Feature keys alone, for schema enums. */
@@ -228,12 +337,7 @@ export const PROJECT_FEATURE_KEYS: ProjectFeature[] = PROJECT_FEATURES.map((item
  * projects displayed before they became optional, so the column arriving does
  * not silently hide anything.
  */
-export const DEFAULT_PROJECT_FEATURES: ProjectFeature[] = [
-  "tasks",
-  "campaigns",
-  "timesheet",
-  "report",
-];
+export const DEFAULT_PROJECT_FEATURES: ProjectFeature[] = ["tasks", "campaigns", "report"];
 
 export const DESIGNATIONS = [
   "Software Engineer",
@@ -257,11 +361,17 @@ export const COLOR_SWATCHES = [
   "#1ac3e6",
 ];
 
-/**
- * "Today" for the demo data — overdue checks are relative to this so the seeded
- * February dates keep telling the same story regardless of the wall clock.
- */
-export const TODAY = "2026-02-17";
+/** Swatches offered when creating a label. */
+export const LABEL_COLORS = [
+  "#64748B",
+  "#1E3A5F",
+  "#21C45D",
+  "#F59F0A",
+  "#EF4343",
+  "#A73CDD",
+  "#1AC3E6",
+];
+
 
 // --- Date helpers ----------------------------------------------------------
 // All UTC-based so a server in one timezone and a browser in another agree.
@@ -299,6 +409,29 @@ export function parseDay(iso: string) {
 
 export function toIso(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Today, as `yyyy-MM-dd` in the running process's own timezone.
+ *
+ * This is the app's single notion of a day, and it is the *server's* day on
+ * purpose: `TimeEntry.date` is a date-only column written from the server's
+ * local calendar, so overdue checks, week grids and day comparisons all have to
+ * read it the same way to agree with what was stored.
+ *
+ * Client components should therefore be handed the server's value as a prop
+ * rather than calling this themselves — otherwise a browser in a different
+ * timezone can disagree with the markup it is hydrating.
+ *
+ * This replaced a `TODAY` constant frozen at a demo date. Time tracking records
+ * real timestamps, and a fixed "today" filed live work into a week nobody was
+ * looking at.
+ */
+export function todayIso() {
+  const now = new Date();
+  // Build the local calendar day as a UTC instant, so `toIso` — which formats
+  // in UTC — prints the local date rather than shifting it.
+  return toIso(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())));
 }
 
 /** The seven ISO dates of the Monday-start week containing `iso`. */

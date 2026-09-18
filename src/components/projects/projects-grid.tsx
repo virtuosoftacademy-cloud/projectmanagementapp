@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays, Circle, Plus, SquareCheckBig } from "lucide-react";
@@ -174,8 +174,28 @@ function ProjectDialog({
     memberIds: [] as string[],
   });
 
+  const [showAllMembers, setShowAllMembers] = useState(false);
+
   const set = <K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) =>
     setDraft((current) => ({ ...current, [key]: value }));
+
+  const teamNameById = useMemo(
+    () => new Map(teams.map((team) => [team.id, team.name])),
+    [teams],
+  );
+
+  /**
+   * Picking an owning team narrows the picker to that team, since that is who
+   * usually staffs the project. Anyone already ticked stays listed even when
+   * they fall outside the filter — otherwise switching team would strand a
+   * selection that cannot be seen or removed.
+   */
+  const visibleMembers = useMemo(() => {
+    if (showAllMembers || !draft.teamId) return members;
+    return members.filter(
+      (member) => member.teamId === draft.teamId || draft.memberIds.includes(member.id),
+    );
+  }, [members, showAllMembers, draft.teamId, draft.memberIds]);
 
   return (
     <FormDialog
@@ -267,29 +287,60 @@ function ProjectDialog({
         </div>
 
         <fieldset>
-          <legend className="mb-1.5 text-sm font-medium leading-none">Members</legend>
-          <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
-            {members.map((member) => (
-              <label
-                key={member.id}
-                className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 text-sm hover:bg-muted/50"
-              >
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <legend className="text-sm font-medium leading-none">
+              Members ({draft.memberIds.length} selected)
+            </legend>
+            {draft.teamId ? (
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
-                  checked={draft.memberIds.includes(member.id)}
-                  onChange={() =>
-                    set(
-                      "memberIds",
-                      draft.memberIds.includes(member.id)
-                        ? draft.memberIds.filter((id) => id !== member.id)
-                        : [...draft.memberIds, member.id],
-                    )
-                  }
-                  className="h-4 w-4 accent-[hsl(var(--primary))]"
+                  checked={showAllMembers}
+                  onChange={(event) => setShowAllMembers(event.target.checked)}
+                  className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
                 />
-                {member.name}
+                Show everyone
               </label>
-            ))}
+            ) : null}
+          </div>
+
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+            {visibleMembers.length === 0 ? (
+              <p className="p-1.5 text-sm text-muted-foreground">
+                Nobody is on that team yet — tick “Show everyone” to pick from the whole
+                workspace.
+              </p>
+            ) : (
+              visibleMembers.map((member) => (
+                <label
+                  key={member.id}
+                  className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 text-sm hover:bg-muted/50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={draft.memberIds.includes(member.id)}
+                    onChange={() =>
+                      set(
+                        "memberIds",
+                        draft.memberIds.includes(member.id)
+                          ? draft.memberIds.filter((id) => id !== member.id)
+                          : [...draft.memberIds, member.id],
+                      )
+                    }
+                    className="h-4 w-4 accent-[hsl(var(--primary))]"
+                  />
+                  <span className="min-w-0 flex-1 truncate">{member.name}</span>
+                  {/* Only worth labelling when the list is not already one team. */}
+                  {showAllMembers || !draft.teamId ? (
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {member.teamId
+                        ? (teamNameById.get(member.teamId) ?? "Other team")
+                        : "No team"}
+                    </span>
+                  ) : null}
+                </label>
+              ))
+            )}
           </div>
         </fieldset>
 

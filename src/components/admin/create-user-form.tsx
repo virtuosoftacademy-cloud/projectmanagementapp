@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { SelectField } from "@/components/ui/select-field";
-import { DESIGNATIONS, type Role } from "@/lib/domain";
+import { DESIGNATIONS, type Role, type Team } from "@/lib/domain";
 import { ROLES, roleLabel } from "@/lib/permissions";
 import { createUserSchema, fieldErrors, passwordChecks } from "@/lib/validations";
 import { cn } from "@/lib/utils";
@@ -30,7 +30,7 @@ type Draft = {
   phone: string;
   role: Role;
   designation: string;
-  hourlyRate: number;
+  teamId: string;
   monthlyHours: number;
   active: boolean;
 };
@@ -44,12 +44,18 @@ const EMPTY: Draft = {
   phone: "",
   role: "member",
   designation: "",
-  hourlyRate: 0,
+  teamId: "",
   monthlyHours: 160,
   active: true,
 };
 
-export function CreateUserForm({ roleHints }: { roleHints: Record<Role, string> }) {
+export function CreateUserForm({
+  roleHints,
+  teams,
+}: {
+  roleHints: Record<Role, string>;
+  teams: Pick<Team, "id" | "name">[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [draft, setDraft] = useState<Draft>(EMPTY);
@@ -247,13 +253,15 @@ export function CreateUserForm({ roleHints }: { roleHints: Record<Role, string> 
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Hourly rate (PKR)">
-              <Input
-                type="number"
-                min={0}
-                value={draft.hourlyRate}
-                onChange={(event) => set("hourlyRate", Number(event.target.value))}
+            <Field label="Team" hint="Which team they belong to. Optional.">
+              <SelectField
+                value={draft.teamId}
+                onValueChange={(value) => set("teamId", value)}
+                placeholder={teams.length === 0 ? "No teams yet" : "Select team"}
+                disabled={teams.length === 0}
+                options={teams.map((team) => ({ value: team.id, label: team.name }))}
               />
+              <FieldError message={errors.teamId} />
             </Field>
             <Field label="Monthly hours">
               <Input

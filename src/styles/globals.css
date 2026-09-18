@@ -4,109 +4,128 @@
  * Design tokens are raw HSL triplets so they can be composed with alpha
  * modifiers (e.g. `bg-primary/10`). Light values live on :root, dark values are
  * applied both by the `.dark` class and by the system preference.
+ *
+ * Palette: a calm, executive system — muted navy primary, warm ivory surfaces,
+ * sage and gold as the only accents. Source hex values are noted beside each
+ * token so they can be checked against the palette document.
+ *
+ * The sidebar is deep charcoal in BOTH modes, which is why its own tokens do
+ * not follow the light/dark surfaces around them: its foreground stays light
+ * regardless of theme.
  */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 220 14% 10%;
-  --card: 0 0% 100%;
-  --card-foreground: 220 14% 10%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 220 14% 10%;
-  --primary: 220 80% 56%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 96%;
-  --secondary-foreground: 220 14% 10%;
-  --muted: 220 14% 96%;
-  --muted-foreground: 220 10% 46%;
-  --accent: 220 14% 93%;
-  --accent-foreground: 220 14% 10%;
-  --destructive: 0 72% 51%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 92% 50%;
-  --warning-foreground: 0 0% 100%;
-  --border: 220 13% 91%;
-  --input: 220 13% 91%;
-  --ring: 220 80% 56%;
-  --sidebar-background: 220 14% 98%;
-  --sidebar-foreground: 220 10% 30%;
-  --sidebar-primary: 220 80% 56%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 14% 93%;
-  --sidebar-accent-foreground: 220 14% 10%;
-  --sidebar-border: 220 13% 91%;
-  --sidebar-ring: 220 80% 56%;
+  --background: 240 11.11% 96.47%; /* #F5F5F7 soft slate */
+  --foreground: 0 0% 10.2%; /* #1A1A1A near black */
+  --card: 45 28.57% 97.25%; /* #FAF9F6 warm ivory */
+  --card-foreground: 0 0% 10.2%;
+  --popover: 45 28.57% 97.25%;
+  --popover-foreground: 0 0% 10.2%;
+  --primary: 214.15 52% 24.51%; /* #1E3A5F muted navy */
+  --primary-foreground: 45 28.57% 97.25%;
+  /* Secondary, muted and accent are not in the palette: they are derived from
+     the ivory/taupe surface family so hovers and chips stay in the same key. */
+  --secondary: 40 15% 92%;
+  --secondary-foreground: 0 0% 10.2%;
+  --muted: 40 15% 93%;
+  --muted-foreground: 220 8.94% 46.08%; /* #6B7280 medium gray */
+  --accent: 40 14.75% 88.04%; /* matches the border taupe, for hover fills */
+  --accent-foreground: 0 0% 10.2%;
+  /* No red in the palette; this is desaturated to sit beside the sage and gold
+     rather than the pure red it replaced. */
+  --destructive: 4 45% 46%;
+  --destructive-foreground: 45 28.57% 97.25%;
+  --success: 141.89 69.16% 58.04%; /* #4ADE80 soft green */
+  --success-foreground: 0 0% 10.2%;
+  --warning: 38.71 46.27% 60.59%; /* #C9A86C soft gold */
+  --warning-foreground: 0 0% 10.2%;
+  --border: 40 14.75% 88.04%; /* #E5E2DC soft taupe gray */
+  --input: 40 14.75% 88.04%;
+  --ring: 214.15 52% 24.51%;
+  /* Sage — progress rings, "Done" column, restrained positive accent. */
+  --sage: 147.43 14.06% 48.82%; /* #6B8E7B */
+  --sage-foreground: 45 28.57% 97.25%;
+  --sidebar-background: 240 3.45% 11.37%; /* #1C1C1E deep charcoal */
+  --sidebar-foreground: 240 5% 78%;
+  --sidebar-primary: 214 45% 62%; /* lifted navy — 5.7:1 on the charcoal sidebar */
+  --sidebar-primary-foreground: 0 0% 96.08%;
+  --sidebar-accent: 240 3% 18%;
+  --sidebar-accent-foreground: 0 0% 96.08%;
+  --sidebar-border: 240 3% 20%;
+  --sidebar-ring: 214 45% 62%;
   --radius: 0.5rem;
 }
 
 .dark {
-  --background: 220 16% 8%;
-  --foreground: 220 14% 96%;
-  --card: 220 16% 10%;
-  --card-foreground: 220 14% 96%;
-  --popover: 220 16% 10%;
-  --popover-foreground: 220 14% 96%;
-  --primary: 220 80% 60%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 220 14% 16%;
-  --secondary-foreground: 220 14% 96%;
-  --muted: 220 14% 16%;
-  --muted-foreground: 220 10% 55%;
-  --accent: 220 14% 16%;
-  --accent-foreground: 220 14% 96%;
-  --destructive: 0 62% 40%;
-  --destructive-foreground: 0 0% 100%;
-  --success: 142 71% 40%;
-  --success-foreground: 0 0% 100%;
-  --warning: 38 80% 50%;
-  --warning-foreground: 0 0% 100%;
-  --border: 220 14% 18%;
-  --input: 220 14% 18%;
-  --ring: 220 80% 60%;
-  --sidebar-background: 220 16% 7%;
-  --sidebar-foreground: 220 10% 70%;
-  --sidebar-primary: 220 80% 60%;
-  --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 220 14% 14%;
-  --sidebar-accent-foreground: 220 14% 96%;
-  --sidebar-border: 220 14% 14%;
-  --sidebar-ring: 220 80% 60%;
+  --background: 240 3.23% 6.08%; /* #0F0F10 near black */
+  --foreground: 0 0% 96.08%; /* #F5F5F5 soft white */
+  --card: 240 2.7% 14.51%; /* #242426 dark slate */
+  --card-foreground: 0 0% 96.08%;
+  --popover: 240 2.7% 14.51%;
+  --popover-foreground: 0 0% 96.08%;
+  --primary: 212.17 45.1% 30%; /* #2A4A6F soft navy */
+  --primary-foreground: 0 0% 96.08%;
+  --secondary: 240 3% 19%;
+  --secondary-foreground: 0 0% 96.08%;
+  --muted: 240 3% 19%;
+  --muted-foreground: 240 5.03% 64.9%; /* #A1A1AA medium gray */
+  --accent: 240 1.69% 23.14%;
+  --accent-foreground: 0 0% 96.08%;
+  --destructive: 4 40% 42%;
+  --destructive-foreground: 0 0% 96.08%;
+  --success: 141.89 69.16% 58.04%; /* #4ADE80 soft green */
+  --success-foreground: 240 3.23% 6.08%;
+  --warning: 41.33 51.14% 65.49%; /* #D4B87A soft gold */
+  --warning-foreground: 240 3.23% 6.08%;
+  --border: 240 1.69% 23.14%; /* #3A3A3C dark taupe */
+  --input: 240 1.69% 23.14%;
+  --ring: 212 45% 45%;
+  --sage: 148.33 15.65% 54.9%; /* #7A9E8B lifted for dark backgrounds */
+  --sage-foreground: 240 3.23% 6.08%;
+  --sidebar-background: 240 3.7% 10.59%; /* #1A1A1C charcoal */
+  --sidebar-foreground: 240 5% 72%;
+  --sidebar-primary: 214 45% 62%;
+  --sidebar-primary-foreground: 0 0% 96.08%;
+  --sidebar-accent: 240 3% 17%;
+  --sidebar-accent-foreground: 0 0% 96.08%;
+  --sidebar-border: 240 2% 21%;
+  --sidebar-ring: 214 45% 62%;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
-    --background: 220 16% 8%;
-    --foreground: 220 14% 96%;
-    --card: 220 16% 10%;
-    --card-foreground: 220 14% 96%;
-    --popover: 220 16% 10%;
-    --popover-foreground: 220 14% 96%;
-    --primary: 220 80% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 16%;
-    --secondary-foreground: 220 14% 96%;
-    --muted: 220 14% 16%;
-    --muted-foreground: 220 10% 55%;
-    --accent: 220 14% 16%;
-    --accent-foreground: 220 14% 96%;
-    --destructive: 0 62% 40%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 40%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 80% 50%;
-    --warning-foreground: 0 0% 100%;
-    --border: 220 14% 18%;
-    --input: 220 14% 18%;
-    --ring: 220 80% 60%;
-    --sidebar-background: 220 16% 7%;
-    --sidebar-foreground: 220 10% 70%;
-    --sidebar-primary: 220 80% 60%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 14%;
-    --sidebar-accent-foreground: 220 14% 96%;
-    --sidebar-border: 220 14% 14%;
-    --sidebar-ring: 220 80% 60%;
+    --background: 240 3.23% 6.08%; /* #0F0F10 near black */
+    --foreground: 0 0% 96.08%; /* #F5F5F5 soft white */
+    --card: 240 2.7% 14.51%; /* #242426 dark slate */
+    --card-foreground: 0 0% 96.08%;
+    --popover: 240 2.7% 14.51%;
+    --popover-foreground: 0 0% 96.08%;
+    --primary: 212.17 45.1% 30%; /* #2A4A6F soft navy */
+    --primary-foreground: 0 0% 96.08%;
+    --secondary: 240 3% 19%;
+    --secondary-foreground: 0 0% 96.08%;
+    --muted: 240 3% 19%;
+    --muted-foreground: 240 5.03% 64.9%; /* #A1A1AA medium gray */
+    --accent: 240 1.69% 23.14%;
+    --accent-foreground: 0 0% 96.08%;
+    --destructive: 4 40% 42%;
+    --destructive-foreground: 0 0% 96.08%;
+    --success: 141.89 69.16% 58.04%; /* #4ADE80 soft green */
+    --success-foreground: 240 3.23% 6.08%;
+    --warning: 41.33 51.14% 65.49%; /* #D4B87A soft gold */
+    --warning-foreground: 240 3.23% 6.08%;
+    --border: 240 1.69% 23.14%; /* #3A3A3C dark taupe */
+    --input: 240 1.69% 23.14%;
+    --ring: 212 45% 45%;
+    --sage: 148.33 15.65% 54.9%; /* #7A9E8B lifted for dark backgrounds */
+    --sage-foreground: 240 3.23% 6.08%;
+    --sidebar-background: 240 3.7% 10.59%; /* #1A1A1C charcoal */
+    --sidebar-foreground: 240 5% 72%;
+    --sidebar-primary: 214 45% 62%;
+    --sidebar-primary-foreground: 0 0% 96.08%;
+    --sidebar-accent: 240 3% 17%;
+    --sidebar-accent-foreground: 0 0% 96.08%;
+    --sidebar-border: 240 2% 21%;
+    --sidebar-ring: 214 45% 62%;
   }
 }
 
@@ -131,6 +150,8 @@
   --color-success-foreground: hsl(var(--success-foreground));
   --color-warning: hsl(var(--warning));
   --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-sage: hsl(var(--sage));
+  --color-sage-foreground: hsl(var(--sage-foreground));
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
@@ -184,5 +205,36 @@
   /* Clears the home indicator on devices that report an inset. */
   .safe-area-pb {
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/*
+ * Branding logo swap.
+ *
+ * Mirrors the token rules above rather than relying on Tailwind's `dark:`
+ * variant, because this app's theme has three states: an explicit `.dark`
+ * class, an explicit `.light` class, and "system" — which sets no class and is
+ * resolved by prefers-color-scheme. A variant that only knew about the class
+ * would leave the wrong logo showing for everyone on the default setting.
+ */
+.logo-dark {
+  display: none;
+}
+
+.dark .logo-light {
+  display: none;
+}
+
+.dark .logo-dark {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .logo-light {
+    display: none;
+  }
+
+  :root:not(.light) .logo-dark {
+    display: block;
   }
 }
