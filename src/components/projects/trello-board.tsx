@@ -1,0 +1,840 @@
+"use client";
+
+import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CircleAlert,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { BoardCard } from "@/components/projects/board-card";
+import {
+  AddSubtaskDialog,
+  EditSubtaskDialog,
+  createSubtaskWithFile,
+  saveSubtaskEdit,
+} from "@/components/projects/task-subtasks";
+import { formatMinutes } from "@/lib/duration";
+import { subtreeIds } from "@/lib/subtask-tree";
+import {
+  BoardNameDialog,
+  ListDialog,
+  MoveCardDialog,
+  SubtasksDialog,
+} from "@/components/projects/board-dialogs";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { FilePicker } from "@/components/ui/file-picker";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  ACCEPT_ATTRIBUTE,
+  ATTACHMENT_ACCEPT,
+  MAX_SIZE,
+  formatBytes,
+  validateAttachmentFile,
+  validateImageFile,
+} from "@/lib/r2";
+import {
+  deleteSubtaskAction,
+  setTaskCoverAction,
+  uploadTaskFileAction,
+} from "@/lib/task-actions";
+import {
+  addCardAction,
+  createBoardAction,
+  createListAction,
+  deleteBoardAction,
+  deleteListAction,
+  moveCardAction,
+  moveListAction,
+  renameBoardAction,
+  updateListAction,
+} from "@/lib/board-actions";
+import {
+  TASK_STATUSES,
+  type Board,
+  type BoardList,
+  type RunningTimer,
+  type Subtask,
+  type Task,
+  type TaskStatus,
+} from "@/lib/domain";
+import { cn } from "@/lib/utils";
+
+/** Identifies our own drags, so a drop from elsewhere is ignored. */
+const DRAG_TYPE = "application/x-card-id";
+
+const byPosition = (a: Task, b: Task) => a.position - b.position;
+
+type Move = { taskId: string; listId: string; index: number; status: TaskStatus };
+
+/**
+ * Applies a card move to a local copy of the tasks, for the optimistic view.
+ *
+ * Mirrors `moveCard` on the server — insert at `index` among the list's other
+ * cards, renumber both lists densely, take the list's status — so what the
+ * board shows while the request is in flight is exactly what it will show
+ * once it lands.
+ */
+function applyMove(tasks: Task[], move: Move): Task[] {
+  const moving = tasks.find((task) => task.id === move.taskId);
+  if (!moving) return tasks;
+
+  const others = tasks.filter((task) => task.id !== move.taskId);
+  const destination = others.filter((task) => task.listId === move.listId).sort(byPosition);
+  destination.splice(move.index, 0, { ...moving, listId: move.listId, status: move.status });
+
+  const source =
+    moving.listId !== move.listId
+      ? others.filter((task) => task.listId === moving.listId).sort(byPosition)
+      : [];
+
+  const untouched = others.filter(
+    (task) => task.listId !== move.listId && task.listId !== moving.listId,
+  );
+
+  return [
+    ...untouched,
+    ...destination.map((task, position) => ({ ...task, position })),
+    ...source.map((task, position) => ({ ...task, position })),
+  ];
+}
+
+type Dialog =
+  | { kind: "new-board" }
+  | { kind: "rename-board" }
+  | { kind: "delete-board" }
+  | { kind: "new-list" }
+  | { kind: "edit-list"; list: BoardList }
+  | { kind: "delete-list"; list: BoardList }
+  | { kind: "move-card"; task: Task }
+  | { kind: "subtasks"; taskId: string }
+  | { kind: "add-subtask"; taskId: string; parentId: string; parentTitle: string }
+  | { kind: "edit-subtask"; subtask: Subtask }
+  | { kind: "delete-subtask"; subtask: Subtask }
+  | null;
+
+/**
+ * A project's boards, Trello-style.
+ *
+ * A project can have several boards; each has its own lists, and each list
+ * *counts as* one task status. Dropping a card on a list gives it that status,
+ * which is what keeps progress, overdue counts and every report correct no
+ * matter how the lists are named or arranged.
+ *
+ * Card moves are optimistic: the card lands immediately, and `useOptimistic`
+ * drops the guess once the refreshed server data arrives — so a rejected move
+ * snaps back on its own, with the error explaining why.
+ */
+export function TrelloBoard({
+  projectId,
+  boards,
+  activeBoardId,
+  tasks,
+  visibleIds,
+  today,
+  canManage,
+  canLog,
+  subtasks,
+  running,
+  onSelectBoard,
+}: {
+  projectId: string;
+  boards: Board[];
+  activeBoardId: string;
+  /** Every live card in the project — the source of truth for positions. */
+  tasks: Task[];
+  /**
+   * The cards the filter bar lets through. Kept separate from `tasks` because a
+   * drop index has to be computed against *all* the cards in a list: dropping
+   * "second" in a filtered view means after the first visible card, which may
+   * be tenth in the list.
+   */
+  visibleIds: Set<string>;
+  today: string;
+  canManage: boolean;
+  /** `time.log` — whether subtask timers are offered. */
+  canLog: boolean;
+  /** Every subtask in the project; each card's dialog picks out its own. */
+  subtasks: Subtask[];
+  running: RunningTimer | null;
+  onSelectBoard: (boardId: string) => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ listId: string; visibleIndex: number } | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
+  const [draft, setDraft] = useState<CardDraft>(EMPTY_CARD);
+
+  const subtasksByTask = useMemo(() => {
+    const map = new Map<string, Subtask[]>();
+    for (const item of subtasks) map.set(item.taskId, [...(map.get(item.taskId) ?? []), item]);
+    return map;
+  }, [subtasks]);
+
+  function describeSubtaskRemoval(subtask: Subtask) {
+    const branch = subtreeIds(subtasksByTask.get(subtask.taskId) ?? [], subtask.id);
+    const beneath = branch.length - 1;
+    const logged = (subtasksByTask.get(subtask.taskId) ?? [])
+      .filter((item) => branch.includes(item.id))
+      .reduce((sum, item) => sum + item.trackedMinutes, 0);
+    return [
+      beneath
+        ? `This deletes it and the ${beneath} subtask${beneath === 1 ? "" : "s"} beneath it.`
+        : "This deletes the subtask.",
+      logged ? `The ${formatMinutes(logged)} logged on it stays on the task.` : "",
+      subtask.files.length ? "Its files stay on the task." : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  const [optimistic, applyOptimistic] = useOptimistic(tasks, applyMove);
+
+  const board = boards.find((item) => item.id === activeBoardId) ?? boards[0];
+  const lists = board?.lists ?? [];
+
+  /** Every live card in a list, in order — filtered or not. */
+  const allIn = (listId: string) =>
+    optimistic.filter((task) => task.listId === listId).sort(byPosition);
+  const visibleIn = (listId: string) => allIn(listId).filter((task) => visibleIds.has(task.id));
+
+  function run(
+    action: () => Promise<{ ok: boolean; error?: string; id?: string }>,
+    onDone?: (id?: string) => void,
+  ) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.error ?? "That did not work.");
+        return;
+      }
+      setDialog(null);
+      onDone?.(result.id);
+      router.refresh();
+    });
+  }
+
+  function move(taskId: string, list: BoardList, index: number) {
+    const card = optimistic.find((task) => task.id === taskId);
+    if (!card) return;
+
+    // Dropping a card exactly where it already is is not worth a round trip.
+    // `index` counts the list's *other* cards, so staying put means it equals
+    // the card's own current index.
+    if (card.listId === list.id && allIn(list.id).findIndex((task) => task.id === taskId) === index) {
+      return;
+    }
+
+    setError(null);
+    startTransition(async () => {
+      applyOptimistic({ taskId, listId: list.id, index, status: list.status });
+      const result = await moveCardAction({ taskId, listId: list.id, index });
+      if (!result.ok) {
+        setError(result.error ?? "Could not move that card.");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  /**
+   * Converts a drop position among the *visible* cards into an index among
+   * *all* of the list's cards — which is what the server counts in. Without
+   * this, dropping into a filtered list would land the card in the wrong place.
+   */
+  function trueIndex(listId: string, visibleIndex: number, taskId: string) {
+    const all = allIn(listId).filter((task) => task.id !== taskId);
+    const visible = all.filter((task) => visibleIds.has(task.id));
+    if (visibleIndex < visible.length) return all.indexOf(visible[visibleIndex]);
+    if (!visible.length) return all.length;
+    return all.indexOf(visible[visible.length - 1]) + 1;
+  }
+
+  /** Where among a list's visible cards the pointer is, by card midpoints. */
+  function pointerIndex(container: HTMLElement, clientY: number, taskId: string | null) {
+    const cards = Array.from(container.querySelectorAll<HTMLElement>("[data-card]")).filter(
+      (element) => element.dataset.card !== taskId,
+    );
+    const index = cards.findIndex((element) => {
+      const rect = element.getBoundingClientRect();
+      return clientY < rect.top + rect.height / 2;
+    });
+    return index === -1 ? cards.length : index;
+  }
+
+  function submitCard(list: BoardList) {
+    const title = draft.title.trim();
+    if (!title) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await addCardAction({
+        listId: list.id,
+        title,
+        description: draft.description.trim(),
+      });
+      if (!result.ok || !result.id) {
+        setError(result.error ?? "Could not add that card.");
+        return;
+      }
+
+      // One upload per request: each file may use the whole body limit.
+      const problems: string[] = [];
+      for (const [upload, chosen] of [
+        [setTaskCoverAction, draft.cover],
+        [uploadTaskFileAction, draft.file],
+      ] as const) {
+        if (!chosen) continue;
+        const form = new FormData();
+        form.set("taskId", result.id);
+        form.set("file", chosen);
+        const uploaded = await upload(form);
+        if (!uploaded.ok) problems.push(`${chosen.name}: ${uploaded.error ?? "upload failed."}`);
+      }
+      if (problems.length) setError(`Card added, but ${problems.join(" ")}`);
+
+      // Stays open for the next card, as Trello's does — cards are usually
+      // added several at a time.
+      setDraft(EMPTY_CARD);
+      router.refresh();
+    });
+  }
+
+  if (!board) {
+    return <p className="text-sm text-muted-foreground">This project has no boards yet.</p>;
+  }
+
+  const moving = dialog?.kind === "move-card" ? dialog.task : null;
+  const subtasksTask =
+    dialog?.kind === "subtasks" ? tasks.find((task) => task.id === dialog.taskId) : undefined;
+  const statusLabel = (status: TaskStatus) =>
+    TASK_STATUSES.find((item) => item.status === status)?.label ?? status;
+
+  return (
+    <div className="space-y-3">
+      {/* Board tabs */}
+      <div className="flex flex-wrap items-center gap-1 border-b pb-2">
+        {boards.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelectBoard(item.id)}
+            aria-current={item.id === board.id ? "page" : undefined}
+            className={cn(
+              "rounded-t-md border-b-2 px-3 py-1.5 text-sm transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              item.id === board.id
+                ? "border-primary font-medium text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {item.name}
+          </button>
+        ))}
+
+        {canManage ? (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => setDialog({ kind: "new-board" })}
+            >
+              <Plus className="h-4 w-4" />
+              Board
+            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="ml-auto" aria-label="Board options">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setDialog({ kind: "rename-board" })}>
+                  <Pencil className="h-4 w-4" />
+                  Rename board
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={boards.length < 2}
+                  onSelect={() => setDialog({ kind: "delete-board" })}
+                  className="text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete board
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        ) : null}
+      </div>
+
+      {error ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+        >
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+          {error}
+        </p>
+      ) : null}
+
+      {/* Lists */}
+      <div className="flex items-start gap-3 overflow-x-auto pb-4">
+        {lists.map((list, listIndex) => {
+          const cards = visibleIn(list.id);
+          const total = allIn(list.id).length;
+          const isTarget = drop?.listId === list.id;
+          const undragged = cards.filter((task) => task.id !== dragging);
+          const slotOf = (taskId: string) => undragged.findIndex((task) => task.id === taskId);
+
+          return (
+            <section
+              key={list.id}
+              aria-label={list.name}
+              className="flex max-h-[calc(100svh-16rem)] w-72 shrink-0 flex-col rounded-lg bg-muted/60"
+            >
+              <header className="flex items-center gap-2 px-3 pb-1 pt-2.5">
+                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold">{list.name}</h3>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {cards.length === total ? total : `${cards.length}/${total}`}
+                </span>
+                {canManage ? (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label={`Options for ${list.name}`}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onSelect={() => setDialog({ kind: "edit-list", list })}>
+                        <Pencil className="h-4 w-4" />
+                        Rename or change status
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={listIndex === 0}
+                        onSelect={() => run(() => moveListAction({ listId: list.id, direction: -1 }))}
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Move left
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={listIndex === lists.length - 1}
+                        onSelect={() => run(() => moveListAction({ listId: list.id, direction: 1 }))}
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        Move right
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => setDialog({ kind: "delete-list", list })}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete list
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
+              </header>
+              <p className="px-3 pb-2 text-[11px] text-muted-foreground">
+                Counts as {statusLabel(list.status)}
+              </p>
+
+              <div
+                className={cn(
+                  "min-h-10 flex-1 space-y-2 overflow-y-auto px-2 pb-2 transition-colors",
+                  isTarget && "bg-primary/5",
+                )}
+                onDragOver={(event) => {
+                  if (!canManage || !event.dataTransfer.types.includes(DRAG_TYPE)) return;
+                  // Without preventDefault the browser refuses the drop outright.
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  const visibleIndex = pointerIndex(event.currentTarget, event.clientY, dragging);
+                  if (drop?.listId !== list.id || drop.visibleIndex !== visibleIndex) {
+                    setDrop({ listId: list.id, visibleIndex });
+                  }
+                }}
+                onDragLeave={(event) => {
+                  // Ignore the events fired while crossing child elements.
+                  if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+                  setDrop((current) => (current?.listId === list.id ? null : current));
+                }}
+                onDrop={(event) => {
+                  if (!canManage) return;
+                  event.preventDefault();
+                  const taskId = event.dataTransfer.getData(DRAG_TYPE);
+                  const visibleIndex = pointerIndex(event.currentTarget, event.clientY, taskId);
+                  setDrop(null);
+                  setDragging(null);
+                  if (taskId) move(taskId, list, trueIndex(list.id, visibleIndex, taskId));
+                }}
+              >
+                {cards.map((task) => {
+                  // The pointer index skips the card being dragged, so the
+                  // slot a card sits in has to skip it too, or the line lands
+                  // one place off for every card below the dragged one.
+                  const isDragged = task.id === dragging;
+                  const slot = slotOf(task.id);
+                  return (
+                    <div key={task.id}>
+                      {isTarget && !isDragged && drop?.visibleIndex === slot ? <DropLine /> : null}
+                      <BoardCard
+                        task={task}
+                        subtasks={subtasksByTask.get(task.id) ?? []}
+                        today={today}
+                        canManage={canManage}
+                        dragging={dragging === task.id}
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData(DRAG_TYPE, task.id);
+                          event.dataTransfer.effectAllowed = "move";
+                          setDragging(task.id);
+                        }}
+                        onDragEnd={() => {
+                          setDragging(null);
+                          setDrop(null);
+                        }}
+                        onMoveRequest={() => setDialog({ kind: "move-card", task })}
+                        onSubtasksRequest={() => setDialog({ kind: "subtasks", taskId: task.id })}
+                        onEditSubtaskRequest={(subtask) =>
+                          setDialog({ kind: "edit-subtask", subtask })
+                        }
+                        onDeleteSubtaskRequest={(subtask) =>
+                          setDialog({ kind: "delete-subtask", subtask })
+                        }
+                        onAddSubtaskRequest={(parent) =>
+                          setDialog({
+                            kind: "add-subtask",
+                            taskId: task.id,
+                            parentId: parent.id,
+                            parentTitle: parent.title,
+                          })
+                        }
+                      />
+                    </div>
+                  );
+                })}
+                {isTarget && drop && drop.visibleIndex >= undragged.length ? <DropLine /> : null}
+              </div>
+
+              {canManage ? (
+                <div className="px-2 pb-2">
+                  {adding === list.id ? (
+                    <AddCardForm
+                      value={draft}
+                      pending={pending}
+                      onChange={setDraft}
+                      onSubmit={() => submitCard(list)}
+                      onCancel={() => {
+                        setAdding(null);
+                        setDraft(EMPTY_CARD);
+                      }}
+                    />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start text-muted-foreground"
+                      onClick={() => {
+                        setAdding(list.id);
+                        setDraft(EMPTY_CARD);
+                      }}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add a card
+                    </Button>
+                  )}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+
+        {canManage ? (
+          <Button
+            variant="outline"
+            className="h-auto w-72 shrink-0 justify-start border-dashed py-3"
+            disabled={pending}
+            onClick={() => setDialog({ kind: "new-list" })}
+          >
+            <Plus className="h-4 w-4" />
+            Add another list
+          </Button>
+        ) : null}
+      </div>
+
+      {/* Dialogs — keyed so each opening starts from fresh values. */}
+      {dialog?.kind === "new-board" ? (
+        <BoardNameDialog
+          key="new-board"
+          open
+          title="New board"
+          initial=""
+          submitLabel={pending ? "Creating…" : "Create board"}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(name) =>
+            run(() => createBoardAction({ projectId, name }), (id) => id && onSelectBoard(id))
+          }
+        />
+      ) : null}
+
+      {dialog?.kind === "rename-board" ? (
+        <BoardNameDialog
+          key="rename-board"
+          open
+          title="Rename board"
+          initial={board.name}
+          submitLabel={pending ? "Saving…" : "Save"}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(name) => run(() => renameBoardAction({ boardId: board.id, name }))}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={dialog?.kind === "delete-board"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => run(() => deleteBoardAction(board.id), (id) => id && onSelectBoard(id))}
+        title={`Delete ${board.name}?`}
+        description={`Its ${optimistic.filter((task) => lists.some((list) => list.id === task.listId)).length} cards move to ${boards.find((item) => item.id !== board.id)?.name ?? "another board"}, each onto a list with the same status. No card is deleted.`}
+      />
+
+      {dialog?.kind === "new-list" ? (
+        <ListDialog
+          key="new-list"
+          open
+          title="Add a list"
+          initial={{ name: "", status: "todo" }}
+          submitLabel={pending ? "Adding…" : "Add list"}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(value) => run(() => createListAction({ boardId: board.id, ...value }))}
+        />
+      ) : null}
+
+      {dialog?.kind === "edit-list" ? (
+        <ListDialog
+          key={`edit-${dialog.list.id}`}
+          open
+          title="Edit list"
+          initial={{ name: dialog.list.name, status: dialog.list.status }}
+          cardCount={allIn(dialog.list.id).length}
+          submitLabel={pending ? "Saving…" : "Save"}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(value) => run(() => updateListAction({ listId: dialog.list.id, ...value }))}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={dialog?.kind === "delete-list"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => dialog?.kind === "delete-list" && run(() => deleteListAction(dialog.list.id))}
+        blocked={dialog?.kind === "delete-list" && allIn(dialog.list.id).length > 0}
+        title={dialog?.kind === "delete-list" ? `Delete ${dialog.list.name}?` : ""}
+        description={
+          dialog?.kind === "delete-list" && allIn(dialog.list.id).length > 0
+            ? `It still has ${allIn(dialog.list.id).length} card${allIn(dialog.list.id).length === 1 ? "" : "s"}. Move them to another list first.`
+            : "The list is empty, so nothing else is affected."
+        }
+      />
+
+      {moving ? (
+        <MoveCardDialog
+          key={moving.id}
+          open
+          title={moving.title}
+          lists={lists}
+          countIn={(listId) => allIn(listId).filter((task) => task.id !== moving.id).length}
+          initialListId={moving.listId ?? lists[0].id}
+          pending={pending}
+          onClose={() => setDialog(null)}
+          onSubmit={(listId, index) => {
+            const list = lists.find((item) => item.id === listId);
+            setDialog(null);
+            if (list) move(moving.id, list, index);
+          }}
+        />
+      ) : null}
+
+      {subtasksTask ? (
+        <SubtasksDialog
+          key={subtasksTask.id}
+          open
+          taskId={subtasksTask.id}
+          taskTitle={subtasksTask.title}
+          subtasks={subtasksByTask.get(subtasksTask.id) ?? []}
+          running={running}
+          canManage={canManage}
+          canLog={canLog}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
+
+      {dialog?.kind === "add-subtask" ? (
+        <AddSubtaskDialog
+          key={dialog.parentId}
+          parentTitle={dialog.parentTitle}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(values) =>
+            run(
+              () => createSubtaskWithFile(dialog.taskId, dialog.parentId, values),
+              () => setDialog(null),
+            )
+          }
+        />
+      ) : null}
+
+      {dialog?.kind === "edit-subtask" ? (
+        <EditSubtaskDialog
+          key={dialog.subtask.id}
+          subtask={dialog.subtask}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(values) => run(() => saveSubtaskEdit(dialog.subtask, values))}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={dialog?.kind === "delete-subtask"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => {
+          if (dialog?.kind !== "delete-subtask") return;
+          run(() => deleteSubtaskAction(dialog.subtask.id));
+        }}
+        confirmLabel="Delete"
+        title={dialog?.kind === "delete-subtask" ? `Delete ${dialog.subtask.title}?` : "Delete subtask?"}
+        description={dialog?.kind === "delete-subtask" ? describeSubtaskRemoval(dialog.subtask) : ""}
+      />
+
+      {/* A drag is announced by its outcome, not by every hover. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {pending ? "Saving…" : ""}
+      </p>
+    </div>
+  );
+}
+
+function DropLine() {
+  return <div aria-hidden className="mb-2 h-1 rounded-full bg-primary" />;
+}
+
+type CardDraft = { title: string; description: string; cover: File | null; file: File | null };
+
+const EMPTY_CARD: CardDraft = { title: "", description: "", cover: null, file: null };
+
+function AddCardForm({
+  value,
+  pending,
+  onChange,
+  onSubmit,
+  onCancel,
+}: {
+  value: CardDraft;
+  pending: boolean;
+  onChange: (value: CardDraft) => void;
+  onSubmit: () => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const set = <K extends keyof CardDraft>(key: K, next: CardDraft[K]) =>
+    onChange({ ...value, [key]: next });
+
+  return (
+    <form
+      className="space-y-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+        ref.current?.focus();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onCancel();
+      }}
+    >
+      <Textarea
+        ref={ref}
+        autoFocus
+        rows={2}
+        value={value.title}
+        maxLength={200}
+        placeholder="Enter a title for this card…"
+        aria-label="Card title"
+        className="resize-none bg-card text-sm"
+        onChange={(event) => set("title", event.target.value)}
+        onKeyDown={(event) => {
+          // Enter adds, as in Trello; Shift+Enter is a line break.
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+      />
+      <Textarea
+        rows={2}
+        value={value.description}
+        maxLength={5000}
+        disabled={pending}
+        placeholder="Description (optional)"
+        aria-label="Card description"
+        className="resize-none bg-card text-sm"
+        onChange={(event) => set("description", event.target.value)}
+      />
+      <FilePicker
+        preview
+        value={value.cover}
+        onChange={(file) => set("cover", file)}
+        accept={ACCEPT_ATTRIBUTE}
+        validate={validateImageFile}
+        disabled={pending}
+        buttonLabel="Cover image"
+      />
+      <FilePicker
+        value={value.file}
+        onChange={(file) => set("file", file)}
+        accept={ATTACHMENT_ACCEPT}
+        validate={validateAttachmentFile}
+        disabled={pending}
+        buttonLabel="Attach file"
+        hint={"Up to " + formatBytes(MAX_SIZE) + ". Images, PDF, Office, TXT or CSV."}
+      />
+      <div className="flex items-center gap-1">
+        <Button type="submit" size="sm" disabled={pending || !value.title.trim()}>
+          {pending ? "Adding…" : "Add card"}
+        </Button>
+        <Button type="button" variant="ghost" size="icon" aria-label="Cancel" onClick={onCancel}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+    </form>
+  );
+}

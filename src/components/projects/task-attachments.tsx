@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { CircleAlert, ImagePlus, Trash2, Upload, X } from "lucide-react";
+import { CircleAlert, FileText, ImagePlus, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,10 +13,15 @@ import {
   ALLOWED_LABEL,
   MAX_SIZE,
   formatBytes,
+  isImageMimeType,
   isOptimizableImageSrc,
   validateImageForSlot,
 } from "@/lib/r2";
-import { deleteAttachmentAction, uploadTaskImagesAction } from "@/lib/task-actions";
+import {
+  deleteAttachmentAction,
+  uploadTaskImagesAction,
+  type UploadOutcome,
+} from "@/lib/task-actions";
 import { cn } from "@/lib/utils";
 
 /** A file chosen but not yet saved. Local only until the upload succeeds. */
@@ -119,11 +124,27 @@ export function TaskAttachments({
     setNotice(null);
 
     startTransition(async () => {
-      const form = new FormData();
-      form.set("taskId", taskId);
-      for (const item of queue) form.append("files", item.file);
-
-      const result = await uploadTaskImagesAction(form);
+      // One request per file, not one for the batch. A server action's body is
+      // capped (`serverActions.bodySizeLimit` in next.config.ts), and five
+      // 10MB photos in a single request would be rejected at the HTTP layer —
+      // before the action could even say which ones were too big.
+      const results: UploadOutcome[] = [];
+      let fatal: string | null = null;
+      for (const item of queue) {
+        const form = new FormData();
+        form.set("taskId", taskId);
+        form.append("files", item.file);
+        try {
+          const response = await uploadTaskImagesAction(form);
+          if (response.results.length) results.push(...response.results);
+          else fatal = response.error ?? "Could not upload that image.";
+        } catch {
+          // The request itself failed — too large for the limit, or offline.
+          results.push({ filename: item.file.name, ok: false, error: "The upload failed." });
+        }
+        if (fatal) break;
+      }
+      const result = { results, error: fatal ?? undefined };
 
       if (!result.results.length) {
         setError(result.error ?? "Could not upload those images.");
@@ -151,7 +172,10 @@ export function TaskAttachments({
 
       const saved = result.results.filter((row) => row.ok).length;
       if (saved) setNotice(`Saved ${saved} image${saved === 1 ? "" : "s"}.`);
-      if (failedByName.size) setError(`${failedByName.size} image could not be saved.`);
+      if (failedByName.size) {
+        const n = failedByName.size;
+        setError(`${n} image${n === 1 ? "" : "s"} could not be saved.`);
+      }
       if (saved) router.refresh();
     });
   }
@@ -269,16 +293,25 @@ export function TaskAttachments({
                       couple of hundred; `sizes` is what stops the browser
                       fetching the full-size object for a thumbnail. The link
                       still opens the original. */}
-                  <Image
-                    src={attachment.url}
-                    alt={attachment.filename}
-                    fill
-                    sizes="(min-width: 1024px) 20vw, (min-width: 640px) 30vw, 45vw"
-                    className="object-cover"
-                    // A bucket that is configured but not yet whitelisted in
-                    // next.config.ts would otherwise throw at render time.
-                    unoptimized={!isOptimizableImageSrc(attachment.url)}
-                  />
+                  {isImageMimeType(attachment.mimeType) ? (
+                    <Image
+                      src={attachment.url}
+                      alt={attachment.filename}
+                      fill
+                      sizes="(min-width: 1024px) 20vw, (min-width: 640px) 30vw, 45vw"
+                      className="object-cover"
+                      // A bucket that is configured but not yet whitelisted in
+                      // next.config.ts would otherwise throw at render time.
+                      unoptimized={!isOptimizableImageSrc(attachment.url)}
+                    />
+                  ) : (
+                    <span className="flex h-full flex-col items-center justify-center gap-1 text-muted-foreground">
+                      <FileText aria-hidden className="h-8 w-8" />
+                      <span className="text-[10px] font-medium uppercase">
+                        {attachment.filename.split(".").pop()}
+                      </span>
+                    </span>
+                  )}
                 </a>
 
                 <p className="mt-1 truncate text-xs text-muted-foreground" title={attachment.filename}>

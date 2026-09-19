@@ -42,6 +42,7 @@ export function GlobalTimerIndicator({ running }: { running: RunningTimer | null
         className="hidden max-w-[16rem] truncate text-muted-foreground hover:text-foreground sm:block"
       >
         {running.taskTitle}
+        {running.subtaskTitle ? ` › ${running.subtaskTitle}` : null}
       </Link>
 
       <Button

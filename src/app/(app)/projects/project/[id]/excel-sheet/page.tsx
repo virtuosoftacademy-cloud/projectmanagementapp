@@ -7,15 +7,15 @@ import { getSessionUser, requireUser } from "@/lib/session";
 
 export async function generateMetadata({
   params,
-}: PageProps<"/projects/project/[id]/spreadsheet">): Promise<Metadata> {
+}: PageProps<"/projects/project/[id]/excel-sheet">): Promise<Metadata> {
   const { id } = await params;
   const viewer = await getSessionUser();
   const project = viewer?.workspaceId ? await getProject(viewer.workspaceId, id) : null;
-  return { title: `${project?.name ?? "Project"} — Spreadsheets` };
+  return { title: `${project?.name ?? "Project"} — Excel Sheets` };
 }
 
 /**
- * The spreadsheets belonging to one project.
+ * The Excel sheets belonging to one project.
  *
  * Independent of everything else in the app: a sheet is not a view of tasks,
  * time or anything derived — just a named grid people type into, stored on
@@ -28,14 +28,14 @@ export async function generateMetadata({
 export default async function ProjectSpreadsheetPage({
   params,
   searchParams,
-}: PageProps<"/projects/project/[id]/spreadsheet">) {
+}: PageProps<"/projects/project/[id]/excel-sheet">) {
   const viewer = await requireUser();
   const { id } = await params;
   const { sheet: requested } = await searchParams;
 
   const project = await getProject(viewer.workspaceId, id);
   // A feature switched off is genuinely gone, not just hidden from the nav.
-  if (!project || !project.features.includes("spreadsheet")) notFound();
+  if (!project || !project.features.includes("excel-sheet")) notFound();
 
   const [sheets, members] = await Promise.all([
     getProjectSheets(viewer.workspaceId, project.id),
@@ -49,9 +49,9 @@ export default async function ProjectSpreadsheetPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold leading-tight tracking-tight">Spreadsheets</h1>
+        <h1 className="text-2xl font-bold leading-tight tracking-tight">Excel Sheets</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Free-form sheets for {project.name}
+          Sheets with formulas and formatting for {project.name}
         </p>
       </div>
 

@@ -17,6 +17,7 @@ import {
   type TaskFilter,
 } from "@/components/projects/task-filters";
 import { createTaskAction } from "@/lib/actions";
+import { setTaskCoverAction, uploadTaskFileAction } from "@/lib/task-actions";
 import {
   TASK_STATUSES,
   formatDay,
@@ -133,12 +134,30 @@ export function TasksView({
         pending={pending}
         onSubmit={(draft) => {
           startTransition(async () => {
-            const result = await createTaskAction(draft);
-            setError(result.error ?? null);
-            if (result.ok) {
-              setCreating(false);
-              router.refresh();
+            const { cover, file, ...fields } = draft;
+            const result = await createTaskAction(fields);
+            if (!result.ok || !result.id) {
+              setError(result.error ?? null);
+              return;
             }
+
+            // One upload per request: each file may use the whole body limit.
+            const problems: string[] = [];
+            for (const [upload, chosen] of [
+              [setTaskCoverAction, cover],
+              [uploadTaskFileAction, file],
+            ] as const) {
+              if (!chosen) continue;
+              const form = new FormData();
+              form.set("taskId", result.id);
+              form.set("file", chosen);
+              const uploaded = await upload(form);
+              if (!uploaded.ok) problems.push(`${chosen.name}: ${uploaded.error ?? "upload failed."}`);
+            }
+
+            setError(problems.length ? `Task created, but ${problems.join(" ")}` : null);
+            setCreating(false);
+            router.refresh();
           });
         }}
       />

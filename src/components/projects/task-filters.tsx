@@ -77,6 +77,7 @@ export function TaskFilters({
   labels,
   resultCount,
   totalCount,
+  allowArchived = true,
 }: {
   filter: TaskFilter;
   onChange: (filter: TaskFilter) => void;
@@ -84,6 +85,11 @@ export function TaskFilters({
   labels: Label[];
   resultCount: number;
   totalCount: number;
+  /**
+   * Whether to offer "Show archived". A board has nowhere to put an archived
+   * card — it is off every list by definition — so boards turn this off.
+   */
+  allowArchived?: boolean;
 }) {
   const set = <K extends keyof TaskFilter>(key: K, value: TaskFilter[K]) =>
     onChange({ ...filter, [key]: value });
@@ -140,15 +146,17 @@ export function TaskFilters({
         ]}
       />
 
-      <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={filter.includeArchived}
-          onChange={(event) => set("includeArchived", event.target.checked)}
-          className="h-4 w-4 accent-[hsl(var(--primary))]"
-        />
-        Show archived
-      </label>
+      {allowArchived ? (
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={filter.includeArchived}
+            onChange={(event) => set("includeArchived", event.target.checked)}
+            className="h-4 w-4 accent-[hsl(var(--primary))]"
+          />
+          Show archived
+        </label>
+      ) : null}
 
       {isFiltered(filter) ? (
         <>

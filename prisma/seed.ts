@@ -12,6 +12,15 @@ function isoDate(value: string | null | undefined) {
   return new Date(Date.UTC(year, month - 1, day));
 }
 
+/** A seeded subtask and, optionally, its own subtasks beneath it. */
+type SeedSubtask = {
+  key: string;
+  title: string;
+  status: "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE";
+  estimateMinutes?: number;
+  children?: readonly SeedSubtask[];
+};
+
 async function main() {
   // The same resolver the app and the Prisma CLI use, so the seed always lands
   // in the database the rest of the project is pointed at: discrete DB_* vars
@@ -146,6 +155,7 @@ async function main() {
 
   // 6. Tasks and assignees.
   const taskIdByKey = new Map<string, string>();
+  const subtaskIdByKey = new Map<string, string>();
   for (const [index, task] of data.tasks.entries()) {
     const shared = {
       projectId: projectId(task.project),
@@ -154,8 +164,6 @@ async function main() {
       estimateMinutes: task.estimateMinutes,
       billable: task.billable,
       dueDate: isoDate("dueDate" in task ? task.dueDate : null),
-      subtasksTotal: "subtasksTotal" in task ? task.subtasksTotal : 0,
-      subtasksDone: "subtasksDone" in task ? task.subtasksDone : 0,
       position: index,
     };
     const existing = await prisma.task.findFirst({
@@ -171,7 +179,37 @@ async function main() {
     await prisma.taskAssignee.createMany({
       data: task.assignees.map((email) => ({ taskId: row.id, userId: userId(email) })),
     });
+
+    // Subtasks are replaced wholesale, like the other child records: they have
+    // no natural key to upsert on, and a re-seed should not double them. One
+    // deleteMany removes every level — the parent links are SetNull, not a
+    // cascade, so nothing depends on deletion order.
+    await prisma.subtask.deleteMany({ where: { taskId: row.id } });
+    if ("subtasks" in task) await createSubtasks(row.id, task.subtasks, null);
   }
+
+  /** Creates one level of the tree, then each node's children beneath it. */
+  async function createSubtasks(taskId: string, items: readonly SeedSubtask[], parentId: string | null) {
+    for (const [position, item] of items.entries()) {
+      const created = await prisma.subtask.create({
+        data: {
+          taskId,
+          parentId,
+          title: item.title,
+          status: item.status,
+          estimateMinutes: item.estimateMinutes ?? 0,
+          position,
+        },
+      });
+      subtaskIdByKey.set(item.key, created.id);
+      if (item.children) await createSubtasks(taskId, item.children, created.id);
+    }
+  }
+  const subtaskId = (key: string) => {
+    const id = subtaskIdByKey.get(key);
+    if (!id) throw new Error(`Seed references unknown subtask ${key}`);
+    return id;
+  };
   const taskId = (key: string) => {
     const id = taskIdByKey.get(key);
     if (!id) throw new Error(`Seed references unknown task ${key}`);
@@ -185,6 +223,7 @@ async function main() {
       date: isoDate(entry.date)!,
       userId: userId(entry.email),
       taskId: taskId(entry.task),
+      subtaskId: "subtask" in entry ? subtaskId(entry.subtask) : null,
       minutes: entry.minutes,
       billable: entry.billable,
       note: entry.note,

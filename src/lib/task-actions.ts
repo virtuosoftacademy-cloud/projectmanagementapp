@@ -13,19 +13,28 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { syncTaskList } from "@/lib/boards";
 import { hoursToMinutes } from "@/lib/domain";
 import { formatMinutes } from "@/lib/duration";
 import { isoToDate, priorityToDb, taskStatusToDb } from "@/lib/mappers";
-import { validateImageFile } from "@/lib/r2";
-import { deleteFromR2, isR2Configured, uploadImageToR2 } from "@/lib/r2-server";
+import { validateAttachmentFile, validateImageFile } from "@/lib/r2";
+import { subtreeIds } from "@/lib/subtask-tree";
+import {
+  deleteFromR2,
+  isR2Configured,
+  uploadAttachmentToR2,
+  uploadImageToR2,
+} from "@/lib/r2-server";
 import { requirePermission, viewerCan } from "@/lib/session";
 import {
   archiveTaskSchema,
+  createSubtaskSchema,
   firstError,
   labelSchema,
   manualTimeEntrySchema,
   startTimerSchema,
   updateLabelSchema,
+  updateSubtaskSchema,
   updateTaskSchema,
   updateTimeEntrySchema,
 } from "@/lib/validations";
@@ -136,6 +145,10 @@ export async function updateTaskAction(input: unknown): Promise<ActionResult> {
     }),
   ]);
 
+  // The dialog can change the status; the card has to follow it to a list
+  // that counts as that status, or the board and the reports would disagree.
+  await syncTaskList(prisma, task.id);
+
   refreshTask(task.projectId, task.id);
   return { ok: true };
 }
@@ -170,6 +183,138 @@ export async function archiveTaskAction(input: unknown): Promise<ActionResult> {
 
   await recordActivity(user, parsed.data.archived ? "archived" : "restored", task.title);
   refreshTask(task.projectId, task.id);
+  return { ok: true };
+}
+
+// --- Subtasks ----------------------------------------------------------------
+
+/**
+ * How many subtasks one task may hold, every level counted. Depth is not
+ * limited — a branch can go as deep as the work does — but the whole tree is
+ * loaded and drawn at once, so its size is.
+ */
+const MAX_SUBTASKS_PER_TASK = 500;
+
+/** A subtask, proven to belong to the caller's workspace, with its task. */
+async function findSubtask(subtaskId: string, workspaceId: string) {
+  return prisma.subtask.findFirst({
+    where: { id: subtaskId, task: { project: { workspaceId } } },
+    include: { task: { select: { id: true, projectId: true, title: true } } },
+  });
+}
+
+/** Whether `subtaskId` is a subtask of `taskId` — ids arrive from the client. */
+async function subtaskBelongsTo(subtaskId: string, taskId: string) {
+  const found = await prisma.subtask.findFirst({
+    where: { id: subtaskId, taskId },
+    select: { id: true },
+  });
+  return Boolean(found);
+}
+
+/** Add a subtask to a task — at the top level, or under another subtask. */
+/** Returns the new subtask's id, so a file can be uploaded to it next. */
+export async function createSubtaskAction(
+  input: unknown,
+): Promise<ActionResult & { id?: string }> {
+  const user = await requirePermission("tasks.manage");
+
+  const parsed = createSubtaskSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const task = await findTask(data.taskId, user.workspaceId);
+  if (!task) return NOT_FOUND;
+
+  // The parent must be in the same task, or a branch could be grafted onto
+  // another task's tree — one this caller may not even be able to see.
+  if (data.parentId && !(await subtaskBelongsTo(data.parentId, task.id))) {
+    return { ok: false, error: "That subtask no longer exists." };
+  }
+
+  const count = await prisma.subtask.count({ where: { taskId: task.id } });
+  if (count >= MAX_SUBTASKS_PER_TASK) {
+    return { ok: false, error: `A task can hold up to ${MAX_SUBTASKS_PER_TASK} subtasks.` };
+  }
+
+  // Appended after its siblings, not after every subtask in the task.
+  const last = await prisma.subtask.findFirst({
+    where: { taskId: task.id, parentId: data.parentId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+
+  const created = await prisma.subtask.create({
+    data: {
+      taskId: task.id,
+      parentId: data.parentId,
+      title: data.title,
+      description: data.description,
+      estimateMinutes: data.estimateMinutes,
+      position: (last?.position ?? -1) + 1,
+    },
+    select: { id: true },
+  });
+
+  refreshTask(task.projectId, task.id);
+  return { ok: true, id: created.id };
+}
+
+/**
+ * Rename a subtask, change its status or its estimate.
+ *
+ * Only this node changes. A parent's status is deliberately left alone when
+ * its children move — the tree shows progress, the person decides status.
+ */
+export async function updateSubtaskAction(input: unknown): Promise<ActionResult> {
+  const user = await requirePermission("tasks.manage");
+
+  const parsed = updateSubtaskSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const subtask = await findSubtask(data.subtaskId, user.workspaceId);
+  if (!subtask) return NOT_FOUND;
+
+  await prisma.subtask.update({
+    where: { id: subtask.id },
+    data: {
+      title: data.title,
+      description: data.description,
+      estimateMinutes: data.estimateMinutes,
+      status: data.status ? taskStatusToDb[data.status as TaskStatus] : undefined,
+    },
+  });
+
+  refreshTask(subtask.task.projectId, subtask.task.id);
+  return { ok: true };
+}
+
+/**
+ * Delete a subtask and its whole branch.
+ *
+ * Done here rather than by a database cascade: MySQL stops following cascades
+ * 15 levels down, and the tree has no depth limit. Every id in the branch is
+ * collected and deleted in one statement; the parent links are SetNull, so the
+ * order inside that statement cannot trip a constraint.
+ *
+ * Time logged on the branch is kept. Its entries lose the subtask link and stay
+ * on the task, so no report changes because a subtask was tidied away.
+ */
+export async function deleteSubtaskAction(subtaskId: string): Promise<ActionResult> {
+  const user = await requirePermission("tasks.manage");
+
+  const subtask = await findSubtask(subtaskId, user.workspaceId);
+  if (!subtask) return NOT_FOUND;
+
+  const siblings = await prisma.subtask.findMany({
+    where: { taskId: subtask.task.id },
+    select: { id: true, parentId: true },
+  });
+
+  await prisma.subtask.deleteMany({ where: { id: { in: subtreeIds(siblings, subtask.id) } } });
+
+  refreshTask(subtask.task.projectId, subtask.task.id);
   return { ok: true };
 }
 
@@ -256,6 +401,7 @@ async function commitTimer(timer: {
   userId: string;
   startedAt: Date;
   note: string;
+  subtaskId: string | null;
 }) {
   const endedAt = new Date();
   const seconds = Math.floor((endedAt.getTime() - timer.startedAt.getTime()) / 1000);
@@ -285,6 +431,7 @@ async function commitTimer(timer: {
         endedAt,
         billable: task?.billable ?? true,
         note: timer.note,
+        subtaskId: timer.subtaskId,
       },
     }),
     prisma.taskTimer.delete({ where: { id: timer.id } }),
@@ -328,13 +475,23 @@ export async function startTimerAction(input: unknown): Promise<ActionResult> {
   const task = await findTask(parsed.data.taskId, user.workspaceId);
   if (!task) return { ok: false, error: "That task no longer exists." };
 
+  const { subtaskId } = parsed.data;
+  const subtask = subtaskId
+    ? await prisma.subtask.findFirst({ where: { id: subtaskId, taskId: task.id }, select: { title: true } })
+    : null;
+  if (subtaskId && !subtask) return { ok: false, error: "That subtask no longer exists." };
+
   const previous = await stopRunningTimer(user.id);
 
   await prisma.taskTimer.create({
-    data: { userId: user.id, taskId: task.id, note: parsed.data.note },
+    data: { userId: user.id, taskId: task.id, subtaskId, note: parsed.data.note },
   });
 
-  await recordActivity(user, "started a timer on", task.title);
+  await recordActivity(
+    user,
+    "started a timer on",
+    subtask ? `${task.title} › ${subtask.title}` : task.title,
+  );
   if (previous) refreshTask(task.projectId, previous.timer.taskId);
   refreshTask(task.projectId, task.id);
   return { ok: true };
@@ -426,6 +583,10 @@ export async function addTimeEntryAction(input: unknown): Promise<ActionResult> 
   const task = await findTask(data.taskId, user.workspaceId);
   if (!task) return { ok: false, error: "That task no longer exists." };
 
+  if (data.subtaskId && !(await subtaskBelongsTo(data.subtaskId, task.id))) {
+    return { ok: false, error: "That subtask no longer exists." };
+  }
+
   const resolved = resolveEntry(data);
 
   await prisma.timeEntry.create({
@@ -438,6 +599,7 @@ export async function addTimeEntryAction(input: unknown): Promise<ActionResult> 
       endedAt: resolved.endedAt,
       billable: task.billable,
       note: data.note,
+      subtaskId: data.subtaskId ?? null,
     },
   });
 
@@ -477,6 +639,10 @@ export async function updateTimeEntryAction(input: unknown): Promise<ActionResul
   if (!entry) return NOT_FOUND;
   if (!allowed) return { ok: false, error: "You can only edit your own time entries." };
 
+  if (data.subtaskId && !(await subtaskBelongsTo(data.subtaskId, entry.task.id))) {
+    return { ok: false, error: "That subtask no longer exists." };
+  }
+
   const resolved = resolveEntry(data);
 
   await prisma.timeEntry.update({
@@ -487,6 +653,7 @@ export async function updateTimeEntryAction(input: unknown): Promise<ActionResul
       startedAt: resolved.startedAt,
       endedAt: resolved.endedAt,
       note: data.note,
+      subtaskId: data.subtaskId,
     },
   });
 
@@ -607,5 +774,111 @@ export async function deleteAttachmentAction(id: string): Promise<ActionResult> 
   await prisma.taskAttachment.delete({ where: { id: attachment.id } });
 
   refreshTask(attachment.task.projectId, attachment.task.id);
+  return { ok: true };
+}
+
+/**
+ * Attach one file — an image or a document, up to 10MB — to a task, or to one
+ * of its subtasks when `subtaskId` is sent.
+ *
+ * One file per request: the action body limit (`next.config.ts`) leaves room
+ * for a single 10MB file, not several.
+ */
+export async function uploadTaskFileAction(formData: FormData): Promise<ActionResult> {
+  const user = await requirePermission("tasks.manage");
+
+  if (!isR2Configured()) {
+    return { ok: false, error: "File uploads are not configured on this server." };
+  }
+
+  const task = await findTask(String(formData.get("taskId") ?? ""), user.workspaceId);
+  if (!task) return { ok: false, error: "That task no longer exists." };
+
+  const subtaskId = String(formData.get("subtaskId") ?? "") || null;
+  if (subtaskId && !(await subtaskBelongsTo(subtaskId, task.id))) {
+    return { ok: false, error: "That subtask no longer exists." };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "No file was selected." };
+
+  // Re-checked here: the action is reachable without the form that checked it.
+  const allowed = validateAttachmentFile(file);
+  if (!allowed.isValid) return { ok: false, error: allowed.error };
+
+  const upload = await uploadAttachmentToR2(file);
+  if (!upload.success || !upload.objectKey) {
+    return { ok: false, error: upload.error ?? "Upload failed." };
+  }
+
+  await prisma.taskAttachment.create({
+    data: {
+      taskId: task.id,
+      subtaskId,
+      objectKey: upload.objectKey,
+      filename: file.name,
+      mimeType: upload.mimeType ?? file.type,
+      size: upload.bytes ?? file.size,
+      width: upload.width ?? null,
+      height: upload.height ?? null,
+      uploadedById: user.id,
+    },
+  });
+
+  await recordActivity(user, "attached a file to", task.title);
+  refreshTask(task.projectId, task.id);
+  return { ok: true };
+}
+
+/**
+ * Set a task's cover image, replacing any it had. The old object is removed
+ * from R2 only after the new one is saved, so a failed upload keeps the old.
+ */
+export async function setTaskCoverAction(formData: FormData): Promise<ActionResult> {
+  const user = await requirePermission("tasks.manage");
+
+  if (!isR2Configured()) {
+    return { ok: false, error: "Image uploads are not configured on this server." };
+  }
+
+  const taskId = String(formData.get("taskId") ?? "");
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, project: { workspaceId: user.workspaceId } },
+    select: { id: true, projectId: true, coverKey: true },
+  });
+  if (!task) return { ok: false, error: "That task no longer exists." };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: "No image was selected." };
+
+  const allowed = validateImageFile(file);
+  if (!allowed.isValid) return { ok: false, error: allowed.error };
+
+  const upload = await uploadImageToR2(file, "task-cover");
+  if (!upload.success || !upload.objectKey) {
+    return { ok: false, error: upload.error ?? "Upload failed." };
+  }
+
+  await prisma.task.update({ where: { id: task.id }, data: { coverKey: upload.objectKey } });
+  if (task.coverKey) await deleteFromR2(task.coverKey);
+
+  refreshTask(task.projectId, task.id);
+  return { ok: true };
+}
+
+export async function removeTaskCoverAction(taskId: string): Promise<ActionResult> {
+  const user = await requirePermission("tasks.manage");
+
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, project: { workspaceId: user.workspaceId } },
+    select: { id: true, projectId: true, coverKey: true },
+  });
+  if (!task) return NOT_FOUND;
+  if (!task.coverKey) return { ok: true };
+
+  await prisma.task.update({ where: { id: task.id }, data: { coverKey: null } });
+  await deleteFromR2(task.coverKey);
+
+  refreshTask(task.projectId, task.id);
   return { ok: true };
 }

@@ -7,7 +7,12 @@ import {
     HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import sharp, { type Metadata } from "sharp";
-import { objectKeyFor, type ImageKind, type R2UploadResult } from "@/lib/r2";
+import {
+    documentMimeType,
+    objectKeyFor,
+    type ImageKind,
+    type R2UploadResult,
+} from "@/lib/r2";
 
 /**
  * Cloudflare R2 — the half that needs credentials.
@@ -69,6 +74,7 @@ export interface UploadOptions {
  */
 const DEFAULTS: Record<ImageKind, Required<UploadOptions>> = {
     "task-attachment": { maxWidth: 2000, quality: 80 },
+    "task-cover": { maxWidth: 1600, quality: 80 },
     avatar: { maxWidth: 512, quality: 85 },
     "logo-light": { maxWidth: 800, quality: 90 },
     "logo-dark": { maxWidth: 800, quality: 90 },
@@ -186,6 +192,54 @@ export async function uploadImageToR2(
             success: false,
             error: error instanceof Error ? error.message : "Upload failed",
         };
+    }
+}
+
+/**
+ * Upload a task attachment: an image is resized and re-encoded like any other,
+ * a document is stored byte-for-byte under the content type its extension names.
+ * Callers validate first with `validateAttachmentFile`.
+ */
+export async function uploadAttachmentToR2(file: File): Promise<R2UploadResult & { mimeType?: string }> {
+    const docType = documentMimeType(file.name);
+    if (!docType) {
+        const result = await uploadImageToR2(file, "task-attachment");
+        return { ...result, mimeType: result.format ? mimeTypeFor(result.format as Metadata["format"]) : file.type };
+    }
+
+    try {
+        const config = getR2Config();
+        if (!config.bucketName || !config.publicUrl) {
+            return { success: false, error: "R2 configuration missing. Please check environment variables." };
+        }
+
+        const client = createR2Client();
+        const body = Buffer.from(await file.arrayBuffer());
+        const objectKey = objectKeyFor("task-attachment", file.name);
+
+        await client.send(
+            new PutObjectCommand({
+                Bucket: config.bucketName,
+                Key: objectKey,
+                Body: body,
+                ContentType: docType,
+                // Opens as a download with its real name rather than the key.
+                ContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+                CacheControl: "public, max-age=31536000, immutable",
+                Metadata: { originalName: encodeURIComponent(file.name), uploadedAt: new Date().toISOString() },
+            })
+        );
+
+        return {
+            success: true,
+            url: `${config.publicUrl}/${objectKey}`,
+            objectKey,
+            bytes: body.length,
+            mimeType: docType,
+        };
+    } catch (error) {
+        console.error("R2 upload failed:", error);
+        return { success: false, error: error instanceof Error ? error.message : "Upload failed" };
     }
 }
 

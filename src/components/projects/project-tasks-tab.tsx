@@ -1,39 +1,55 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { TaskBoard } from "@/components/projects/task-board";
-import { TaskDialog } from "@/components/projects/task-dialog";
 import {
   EMPTY_FILTER,
   TaskFilters,
   filterTasks,
   type TaskFilter,
 } from "@/components/projects/task-filters";
-import { createTaskAction } from "@/lib/actions";
-import type { Label, Member, Task, TaskStatus } from "@/lib/domain";
+import { TrelloBoard } from "@/components/projects/trello-board";
+import type { Board, Label, Member, RunningTimer, Subtask, Task } from "@/lib/domain";
 
-/** Project kanban with a filter bar and a per-column "add task" affordance. */
+/**
+ * A project's boards with a filter bar above them.
+ *
+ * Which board is open lives in the URL (`?board=`), not in state, so a link
+ * to a particular board works and the back button moves between boards.
+ */
 export function ProjectTasksTab({
   projectId,
+  boards,
+  activeBoardId,
   tasks,
   members,
   labels,
+  today,
   canManage,
+  canLog,
+  subtasks,
+  running,
 }: {
   projectId: string;
-  /** Live and archived; the filter decides which are shown. */
+  boards: Board[];
+  activeBoardId: string;
+  /** The project's live (unarchived) tasks. */
   tasks: Task[];
   members: Member[];
   labels: Label[];
+  today: string;
   canManage: boolean;
+  canLog: boolean;
+  /** Every subtask in the project. */
+  subtasks: Subtask[];
+  running: RunningTimer | null;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [addingTo, setAddingTo] = useState<TaskStatus | null>(null);
   const [filter, setFilter] = useState<TaskFilter>(EMPTY_FILTER);
 
-  const visible = filterTasks(tasks, filter);
+  const board = boards.find((item) => item.id === activeBoardId) ?? boards[0];
+  const onBoard = tasks.filter((task) => board?.lists.some((list) => list.id === task.listId));
+  const visible = filterTasks(onBoard, filter);
 
   return (
     <div className="space-y-4">
@@ -43,32 +59,24 @@ export function ProjectTasksTab({
         members={members}
         labels={labels}
         resultCount={visible.length}
-        totalCount={tasks.length}
+        totalCount={onBoard.length}
+        allowArchived={false}
       />
 
-      <TaskBoard
-        tasks={visible}
-        canManage={canManage}
-        onAdd={canManage ? setAddingTo : undefined}
-      />
-
-      <TaskDialog
-        key={addingTo ?? "closed"}
-        open={addingTo !== null}
-        onClose={() => setAddingTo(null)}
-        members={members}
+      <TrelloBoard
         projectId={projectId}
-        pending={pending}
-        defaultStatus={addingTo ?? "todo"}
-        onSubmit={(draft) => {
-          startTransition(async () => {
-            const result = await createTaskAction(draft);
-            if (result.ok) {
-              setAddingTo(null);
-              router.refresh();
-            }
-          });
-        }}
+        boards={boards}
+        activeBoardId={board?.id ?? ""}
+        tasks={tasks}
+        visibleIds={new Set(visible.map((task) => task.id))}
+        today={today}
+        canManage={canManage}
+        canLog={canLog}
+        subtasks={subtasks}
+        running={running}
+        onSelectBoard={(id) =>
+          router.push(`/projects/project/${projectId}/tasks?board=${id}`, { scroll: false })
+        }
       />
     </div>
   );

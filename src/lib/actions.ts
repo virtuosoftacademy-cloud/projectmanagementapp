@@ -11,6 +11,7 @@ import {
   sectionTypeToDb,
   taskStatusToDb,
 } from "@/lib/mappers";
+import { DEFAULT_LISTS, syncTaskList } from "@/lib/boards";
 import { requirePermission } from "@/lib/session";
 import {
   addProjectMembersSchema,
@@ -81,6 +82,15 @@ export async function createProjectAction(input: unknown): Promise<ActionResult>
       startDate: isoToDate(data.startDate),
       endDate: isoToDate(data.endDate),
       members: { create: memberIds.map((userId) => ({ userId })) },
+      // Every project starts with a board, so its first card has somewhere
+      // to go without a setup step.
+      boards: {
+        create: {
+          name: "Main board",
+          position: 0,
+          lists: { create: DEFAULT_LISTS.map((list, index) => ({ ...list, position: index })) },
+        },
+      },
     },
   });
 
@@ -176,7 +186,8 @@ export async function updateProjectFeaturesAction(input: unknown): Promise<Actio
 
 // --- Tasks -----------------------------------------------------------------
 
-export async function createTaskAction(input: unknown): Promise<ActionResult> {
+/** Returns the new task's id, so a cover and a file can be uploaded to it next. */
+export async function createTaskAction(input: unknown): Promise<ActionResult & { id?: string }> {
   const user = await requirePermission("tasks.manage");
 
   const parsed = createTaskSchema.safeParse(input);
@@ -195,10 +206,11 @@ export async function createTaskAction(input: unknown): Promise<ActionResult> {
     select: { position: true },
   });
 
-  await prisma.task.create({
+  const created = await prisma.task.create({
     data: {
       projectId: data.projectId,
       title: data.title,
+      description: data.description,
       status: taskStatusToDb[data.status as TaskStatus],
       priority: priorityToDb[data.priority as Priority],
       estimateMinutes: hoursToMinutes(data.estimateHours),
@@ -207,10 +219,14 @@ export async function createTaskAction(input: unknown): Promise<ActionResult> {
       position: (last?.position ?? -1) + 1,
       assignees: { create: data.assigneeIds.map((userId) => ({ userId })) },
     },
+    select: { id: true },
   });
 
+  // Onto the first board, in a list that counts as the chosen status.
+  await syncTaskList(prisma, created.id);
+
   refreshProject(data.projectId);
-  return { ok: true };
+  return { ok: true, id: created.id };
 }
 
 export async function moveTaskAction(taskId: string, status: TaskStatus): Promise<ActionResult> {
@@ -225,9 +241,14 @@ export async function moveTaskAction(taskId: string, status: TaskStatus): Promis
   });
   if (!task) return NOT_FOUND;
 
-  await prisma.task.update({
-    where: { id: parsed.data.taskId },
-    data: { status: taskStatusToDb[parsed.data.status as TaskStatus] },
+  await prisma.$transaction(async (tx) => {
+    await tx.task.update({
+      where: { id: parsed.data.taskId },
+      data: { status: taskStatusToDb[parsed.data.status as TaskStatus] },
+    });
+    // A new status means a new list — onto one that counts as it, on the
+    // same board — so the board never shows a card in the wrong column.
+    await syncTaskList(tx, parsed.data.taskId);
   });
 
   refreshProject(task.projectId);

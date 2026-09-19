@@ -3,9 +3,21 @@
 import { useState } from "react";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { DialogActions } from "@/components/ui/form-actions";
+import { FilePicker } from "@/components/ui/file-picker";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/components/ui/field";
 import { SelectField } from "@/components/ui/select-field";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  ACCEPT_ATTRIBUTE,
+  ALLOWED_LABEL,
+  ATTACHMENT_ACCEPT,
+  ATTACHMENT_LABEL,
+  MAX_SIZE,
+  formatBytes,
+  validateAttachmentFile,
+  validateImageFile,
+} from "@/lib/r2";
 import {
   PRIORITIES,
   TASK_STATUSES,
@@ -18,12 +30,16 @@ import {
 export type TaskDraft = {
   projectId: string;
   title: string;
+  description: string;
   status: TaskStatus;
   priority: Priority;
   assigneeIds: string[];
   estimateHours: number;
   billable: boolean;
   dueDate: string;
+  /** Uploaded after the task exists; never sent with the draft itself. */
+  cover: File | null;
+  file: File | null;
 };
 
 /** Create-task form. `projects` is omitted when the project is already known. */
@@ -48,6 +64,9 @@ export function TaskDialog({
 }) {
   const [draft, setDraft] = useState({
     title: "",
+    description: "",
+    cover: null as File | null,
+    file: null as File | null,
     projectId: projectId ?? projects?.[0]?.id ?? "",
     assigneeId: "",
     status: defaultStatus,
@@ -73,6 +92,7 @@ export function TaskDialog({
           event.preventDefault();
           onSubmit({
             title: draft.title,
+            description: draft.description.trim(),
             projectId: draft.projectId,
             status: draft.status,
             priority: draft.priority,
@@ -80,6 +100,8 @@ export function TaskDialog({
             estimateHours: Number(draft.estimateHours) || 0,
             billable: draft.billable,
             dueDate: draft.dueDate,
+            cover: draft.cover,
+            file: draft.file,
           });
         }}
       >
@@ -89,6 +111,16 @@ export function TaskDialog({
             value={draft.title}
             placeholder="Task title"
             onChange={(event) => set("title", event.target.value)}
+          />
+        </Field>
+
+        <Field label="Description">
+          <Textarea
+            rows={3}
+            maxLength={5000}
+            value={draft.description}
+            placeholder="What needs doing?"
+            onChange={(event) => set("description", event.target.value)}
           />
         </Field>
 
@@ -147,6 +179,30 @@ export function TaskDialog({
             />
           </Field>
         </div>
+
+        <Field label="Cover image">
+          <FilePicker
+            preview
+            value={draft.cover}
+            onChange={(file) => set("cover", file)}
+            accept={ACCEPT_ATTRIBUTE}
+            validate={validateImageFile}
+            disabled={pending}
+            buttonLabel="Choose image"
+            hint={`${ALLOWED_LABEL}, up to ${formatBytes(MAX_SIZE)}. Shown across the top of the card.`}
+          />
+        </Field>
+
+        <Field label="File">
+          <FilePicker
+            value={draft.file}
+            onChange={(file) => set("file", file)}
+            accept={ATTACHMENT_ACCEPT}
+            validate={validateAttachmentFile}
+            disabled={pending}
+            hint={`${ATTACHMENT_LABEL}. Up to ${formatBytes(MAX_SIZE)}.`}
+          />
+        </Field>
 
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input

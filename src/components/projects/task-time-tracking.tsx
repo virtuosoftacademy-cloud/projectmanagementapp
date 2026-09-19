@@ -1,8 +1,9 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CircleAlert, Pencil, Plus, Trash2 } from "lucide-react";
+import { subtaskOptions } from "@/components/projects/task-subtasks";
 import { TimerControls } from "@/components/projects/timer-controls";
 import {
   TimeEntryForm,
@@ -20,7 +21,8 @@ import {
   deleteTimeEntryAction,
   updateTimeEntryAction,
 } from "@/lib/task-actions";
-import type { RunningTimer, TaskEntry } from "@/lib/domain";
+import { subtaskPath } from "@/lib/subtask-tree";
+import type { RunningTimer, Subtask, TaskEntry } from "@/lib/domain";
 
 /**
  * The time-tracking section of a task: the timer, the total, and every entry.
@@ -34,6 +36,7 @@ export function TaskTimeTracking({
   taskId,
   taskTitle,
   entries,
+  subtasks,
   running,
   viewerId,
   canLog,
@@ -42,6 +45,8 @@ export function TaskTimeTracking({
   taskId: string;
   taskTitle: string;
   entries: TaskEntry[];
+  /** The task's subtasks, so an entry can name — and be put on — one. */
+  subtasks: Subtask[];
   /** The viewer's running timer, on this task or another. */
   running: RunningTimer | null;
   viewerId: string;
@@ -62,6 +67,7 @@ export function TaskTimeTracking({
   );
 
   const totalMinutes = visible.reduce((sum, entry) => sum + Math.round(entry.hours * 60), 0);
+  const options = useMemo(() => subtaskOptions(subtasks), [subtasks]);
   const mayChange = (entry: TaskEntry) => canManageAny || entry.userId === viewerId;
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, onDone?: () => void) {
@@ -142,6 +148,11 @@ export function TaskTimeTracking({
                       <span className="text-muted-foreground"> — {entry.note}</span>
                     ) : null}
                   </p>
+                  {entry.subtaskId && subtasks.some((item) => item.id === entry.subtaskId) ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      on {subtaskPath(subtasks, entry.subtaskId)}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     {/* A timed entry can say when; a duration-only one can only
                         say which day, so it does not pretend otherwise. */}
@@ -192,6 +203,7 @@ export function TaskTimeTracking({
           entry={editing ?? undefined}
           pending={pending}
           error={error}
+          subtasks={options}
           onClose={() => {
             setAdding(false);
             setEditing(null);

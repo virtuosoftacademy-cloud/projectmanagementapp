@@ -30,6 +30,7 @@ export interface R2UploadResult {
  */
 export type ImageKind =
     | "task-attachment"
+    | "task-cover"
     | "avatar"
     | "logo-light"
     | "logo-dark"
@@ -38,6 +39,7 @@ export type ImageKind =
 /** Every valid ImageKind, so an action can validate without repeating the union. */
 export const IMAGE_KINDS = [
     "task-attachment",
+    "task-cover",
     "avatar",
     "logo-light",
     "logo-dark",
@@ -121,6 +123,7 @@ export const R2_PREFIX = "projectmanagement";
 
 const FOLDERS: Record<ImageKind, string> = {
     "task-attachment": `${R2_PREFIX}/tasks`,
+    "task-cover": `${R2_PREFIX}/task-covers`,
     avatar: `${R2_PREFIX}/avatars`,
     "logo-light": `${R2_PREFIX}/branding`,
     "logo-dark": `${R2_PREFIX}/branding`,
@@ -230,6 +233,14 @@ export const IMAGE_VALIDATION: Record<
         recommended: { width: 1600, height: 900 },
         ratioMatters: false,
         note: "Attachments are shown as square thumbnails and open full size.",
+    },
+    "task-cover": {
+        // A banner across the top of a card and of the task page.
+        minDimensions: { width: 320, height: 120 },
+        maxDimensions: { width: 8000, height: 8000 },
+        recommended: { width: 1600, height: 600 },
+        ratioMatters: false,
+        note: "Cropped to a wide strip across the top of the card.",
     },
     avatar: {
         // Rendered as a small circle everywhere it appears.
@@ -343,6 +354,61 @@ export async function validateImageForSlot(
             warnings: [],
         };
     }
+}
+
+// ── Attachments: images and documents ──────────────────────────────
+
+// Documents are stored exactly as uploaded; only images go through sharp.
+const DOCUMENT_TYPES: Record<string, string> = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain",
+    ".csv": "text/csv",
+};
+
+export const ATTACHMENT_LABEL = "Images (JPEG, PNG, WebP, AVIF), PDF, Word, Excel, PowerPoint, TXT or CSV";
+
+/** The `accept` attribute for an attachment picker. */
+export const ATTACHMENT_ACCEPT = [
+    ...ALLOWED_TYPES,
+    ...ALLOWED_EXTENSIONS,
+    ...Object.keys(DOCUMENT_TYPES),
+    ...Object.values(DOCUMENT_TYPES),
+].join(",");
+
+function extensionOf(fileName: string) {
+    const dot = fileName.lastIndexOf(".");
+    return dot === -1 ? "" : fileName.slice(dot).toLowerCase();
+}
+
+/** The content type to store a document under, or null when it is not one we accept. */
+export function documentMimeType(fileName: string): string | null {
+    return DOCUMENT_TYPES[extensionOf(fileName)] ?? null;
+}
+
+export function isImageMimeType(mimeType: string) {
+    return mimeType.startsWith("image/");
+}
+
+/** Type and size check for an attachment. Decided by extension, which browsers report reliably for documents. */
+export function validateAttachmentFile(file: File): { isValid: boolean; error?: string } {
+    const ext = extensionOf(file.name);
+    const isImage = ALLOWED_EXTENSIONS.includes(ext);
+    if (!isImage && !DOCUMENT_TYPES[ext]) {
+        return { isValid: false, error: `${file.name}: not an allowed type. Use ${ATTACHMENT_LABEL}.` };
+    }
+    if (file.size > MAX_SIZE) {
+        return {
+            isValid: false,
+            error: `${file.name} is ${formatBytes(file.size)}. Files can be at most ${formatBytes(MAX_SIZE)}.`,
+        };
+    }
+    return { isValid: true };
 }
 
 /** `1.4 MB` — for file sizes shown next to an attachment. */

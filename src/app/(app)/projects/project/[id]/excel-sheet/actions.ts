@@ -4,11 +4,14 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
+  SHEET_MAX_CELL_LENGTH,
   SHEET_MAX_COLS,
   SHEET_MAX_PER_PROJECT,
   SHEET_MAX_ROWS,
   normaliseCells,
-} from "@/lib/queries";
+  normaliseFormats,
+  normaliseWidths,
+} from "@/lib/sheet-model";
 import { requirePermission } from "@/lib/session";
 import { firstError } from "@/lib/validations";
 
@@ -31,7 +34,7 @@ async function findSheet(sheetId: string, workspaceId: string) {
 }
 
 function refresh(projectId: string) {
-  revalidatePath(`/projects/project/${projectId}/spreadsheet`);
+  revalidatePath(`/projects/project/${projectId}/excel-sheet`);
 }
 
 /** Add a sheet to a project. */
@@ -145,24 +148,52 @@ export async function deleteSheetAction(sheetId: string): Promise<ActionResult> 
 }
 
 /**
- * Save a sheet's contents.
+ * The contents of one sheet, as the grid submits them.
  *
  * Sizes and cell length are capped because the grid is one JSON column: without
  * limits a client could post something large enough to make every later read
- * expensive. The grid is re-shaped to `rowCount` × `colCount` server-side, so a
- * ragged array cannot be stored and then break reads.
+ * expensive. Everything is re-shaped server-side — cells to `rowCount` ×
+ * `colCount`, formats to cells that exist, widths to a usable range — so a
+ * malformed payload cannot be stored and then break reads.
  */
+const sheetContent = {
+  rowCount: z.number().int().min(1).max(SHEET_MAX_ROWS),
+  colCount: z.number().int().min(1).max(SHEET_MAX_COLS),
+  cells: z
+    .array(z.array(z.string().max(SHEET_MAX_CELL_LENGTH)).max(SHEET_MAX_COLS))
+    .max(SHEET_MAX_ROWS),
+  // Validated structurally by normaliseFormats, which drops anything unknown.
+  formats: z.record(z.string(), z.unknown()).default({}),
+  colWidths: z.array(z.number()).max(SHEET_MAX_COLS).default([]),
+  frozenRows: z.number().int().min(0).max(1).default(0),
+};
+
+type SheetContent = {
+  rowCount: number;
+  colCount: number;
+  cells: string[][];
+  formats: Record<string, unknown>;
+  colWidths: number[];
+  frozenRows: number;
+};
+
+/** The columns a sheet's content is stored in, normalised. */
+function stored(content: SheetContent) {
+  return {
+    cells: normaliseCells(content.cells, content.rowCount, content.colCount),
+    rowCount: content.rowCount,
+    colCount: content.colCount,
+    formats: normaliseFormats(content.formats, content.rowCount, content.colCount),
+    colWidths: normaliseWidths(content.colWidths, content.colCount),
+    frozenRows: content.frozenRows,
+  };
+}
+
+/** Save a sheet's contents — values, formulas and formatting together. */
 export async function saveSheetAction(input: unknown): Promise<ActionResult> {
   const user = await requirePermission("projects.edit");
 
-  const parsed = z
-    .object({
-      sheetId: z.string().min(1),
-      rowCount: z.number().int().min(1).max(SHEET_MAX_ROWS),
-      colCount: z.number().int().min(1).max(SHEET_MAX_COLS),
-      cells: z.array(z.array(z.string().max(500))).max(SHEET_MAX_ROWS),
-    })
-    .safeParse(input);
+  const parsed = z.object({ sheetId: z.string().min(1), ...sheetContent }).safeParse(input);
   if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
   const data = parsed.data;
 
@@ -171,14 +202,67 @@ export async function saveSheetAction(input: unknown): Promise<ActionResult> {
 
   await prisma.projectSheet.update({
     where: { id: sheet.id },
-    data: {
-      cells: normaliseCells(data.cells, data.rowCount, data.colCount),
-      rowCount: data.rowCount,
-      colCount: data.colCount,
-      updatedById: user.id,
-    },
+    data: { ...stored(data), updatedById: user.id },
   });
 
   refresh(sheet.projectId);
   return { ok: true };
+}
+
+/**
+ * Add sheets from an imported workbook — one per worksheet.
+ *
+ * The file is parsed in the browser (ExcelJS) and arrives here as sheet
+ * content, so this action never handles a binary format. It is validated and
+ * normalised exactly like a save; it is not trusted for having come from a
+ * file. Worksheets are cut to the grid's limits before they are sent, and the
+ * project's sheet cap applies to the whole batch: if it would be exceeded,
+ * nothing is imported, rather than half a workbook.
+ */
+export async function importSheetsAction(input: unknown): Promise<ActionResult> {
+  const user = await requirePermission("projects.edit");
+
+  const parsed = z
+    .object({
+      projectId: z.string().min(1),
+      sheets: z
+        .array(z.object({ name: nameSchema, ...sheetContent }))
+        .min(1, "The file had no worksheets.")
+        .max(SHEET_MAX_PER_PROJECT),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const project = await prisma.project.findFirst({
+    where: { id: data.projectId, workspaceId: user.workspaceId },
+    select: { id: true, _count: { select: { sheets: true } } },
+  });
+  if (!project) return { ok: false, error: "That project no longer exists." };
+
+  const room = SHEET_MAX_PER_PROJECT - project._count.sheets;
+  if (data.sheets.length > room) {
+    return {
+      ok: false,
+      error: `That file has ${data.sheets.length} worksheets, but this project has room for ${room} more sheet${room === 1 ? "" : "s"} (the limit is ${SHEET_MAX_PER_PROJECT}).`,
+    };
+  }
+
+  const created = await prisma.$transaction(
+    data.sheets.map((sheet, index) =>
+      prisma.projectSheet.create({
+        data: {
+          projectId: project.id,
+          name: sheet.name,
+          position: project._count.sheets + index,
+          updatedById: user.id,
+          ...stored(sheet),
+        },
+        select: { id: true },
+      }),
+    ),
+  );
+
+  refresh(project.id);
+  return { ok: true, sheetId: created[0].id };
 }

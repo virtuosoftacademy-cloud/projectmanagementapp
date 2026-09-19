@@ -5,6 +5,7 @@ import { DialogActions } from "@/components/ui/form-actions";
 import { Field } from "@/components/ui/field";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
+import { SelectField } from "@/components/ui/select-field";
 import { cn } from "@/lib/utils";
 import { parseDuration, toLocalInput } from "@/lib/duration";
 import type { TaskEntry } from "@/lib/domain";
@@ -18,7 +19,12 @@ export type TimeEntryDraft = {
   startedAt?: string;
   endedAt?: string;
   note: string;
+  /** Only sent when the form offered subtasks; null means the task as a whole. */
+  subtaskId?: string | null;
 };
+
+/** Radix rejects an empty option value, so "no subtask" travels as a sentinel. */
+const WHOLE_TASK = "none";
 
 /** Today as `yyyy-mm-dd` in the viewer's timezone, for the date field's default. */
 function todayInput() {
@@ -44,6 +50,7 @@ export function TimeEntryForm({
   entry,
   pending,
   error,
+  subtasks,
 }: {
   open: boolean;
   onClose: () => void;
@@ -52,6 +59,8 @@ export function TimeEntryForm({
   entry?: TaskEntry;
   pending?: boolean;
   error?: string | null;
+  /** The task's subtasks, to put the entry on one. Omitted or empty hides the field. */
+  subtasks?: { value: string; label: string }[];
 }) {
   const hasRange = Boolean(entry?.startedAt && entry?.endedAt);
   const [mode, setMode] = useState<Mode>(hasRange ? "range" : "duration");
@@ -64,6 +73,11 @@ export function TimeEntryForm({
   );
   const [endedAt, setEndedAt] = useState(entry?.endedAt ? toLocalInput(entry.endedAt) : "");
   const [note, setNote] = useState(entry?.note ?? "");
+  const [subtaskId, setSubtaskId] = useState(entry?.subtaskId ?? WHOLE_TASK);
+  const offersSubtasks = Boolean(subtasks?.length);
+  const chosenSubtask = offersSubtasks
+    ? { subtaskId: subtaskId === WHOLE_TASK ? null : subtaskId }
+    : {};
 
   const minutes = parseDuration(duration);
   const rangeMinutes =
@@ -92,8 +106,9 @@ export function TimeEntryForm({
                   // the server stores.
                   startedAt: new Date(startedAt).toISOString(),
                   endedAt: new Date(endedAt).toISOString(),
+                  ...chosenSubtask,
                 }
-              : { date, note, durationMinutes: minutes ?? undefined },
+              : { date, note, durationMinutes: minutes ?? undefined, ...chosenSubtask },
           );
         }}
       >
@@ -180,6 +195,17 @@ export function TimeEntryForm({
             </Field>
           </div>
         )}
+
+        {offersSubtasks ? (
+          <Field label="Subtask">
+            <SelectField
+              value={subtaskId}
+              onValueChange={setSubtaskId}
+              aria-label="Subtask"
+              options={[{ value: WHOLE_TASK, label: "The task as a whole" }, ...subtasks!]}
+            />
+          </Field>
+        ) : null}
 
         <Field label="Note">
           <Input

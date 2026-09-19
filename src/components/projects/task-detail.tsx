@@ -3,10 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArchiveRestore, ArchiveX, ChevronLeft, CircleAlert, Pencil } from "lucide-react";
+import { ArchiveRestore, ArchiveX, ChartNoAxesColumn, ChevronLeft, CircleAlert, Pencil } from "lucide-react";
 import { AvatarStack } from "@/components/avatar-stack";
 import { TaskAttachments } from "@/components/projects/task-attachments";
+import { TaskCover } from "@/components/projects/task-cover";
 import { TaskEditDialog, type TaskEdit } from "@/components/projects/task-edit-dialog";
+import { TaskSubtasks } from "@/components/projects/task-subtasks";
 import { TaskTimeTracking } from "@/components/projects/task-time-tracking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,6 +25,7 @@ import type {
   Label,
   Member,
   RunningTimer,
+  Subtask,
   Task,
   TaskEntry,
   TaskStatus,
@@ -42,6 +45,7 @@ export function TaskDetail({
   projectName,
   entries,
   attachments,
+  subtasks,
   running,
   members,
   labels,
@@ -56,6 +60,7 @@ export function TaskDetail({
   projectName: string;
   entries: TaskEntry[];
   attachments: Attachment[];
+  subtasks: Subtask[];
   running: RunningTimer | null;
   members: Member[];
   labels: Label[];
@@ -98,6 +103,8 @@ export function TaskDetail({
 
   return (
     <div className="max-w-5xl space-y-6">
+      <TaskCover taskId={task.id} coverUrl={task.coverUrl} canManage={canManage} />
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <Link
@@ -138,8 +145,15 @@ export function TaskDetail({
           </div>
         </div>
 
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/projects/project/${projectId}/tasks/${task.id}/analytics`}>
+              <ChartNoAxesColumn className="h-3.5 w-3.5" />
+              Analytics
+            </Link>
+          </Button>
         {canManage ? (
-          <div className="flex items-center gap-2">
+          <>
             <Button variant="outline" size="sm" disabled={pending} onClick={() => setEditing(true)}>
               <Pencil className="h-3.5 w-3.5" />
               Edit
@@ -166,8 +180,9 @@ export function TaskDetail({
                 </>
               )}
             </Button>
-          </div>
+          </>
         ) : null}
+        </div>
       </div>
 
       {error ? (
@@ -238,10 +253,20 @@ export function TaskDetail({
         </Card>
       ) : null}
 
+      <TaskSubtasks
+        taskId={task.id}
+        taskTitle={task.title}
+        subtasks={subtasks}
+        running={running}
+        canManage={canManage}
+        canLog={canLog}
+      />
+
       <TaskTimeTracking
         taskId={task.id}
         taskTitle={task.title}
         entries={entries}
+        subtasks={subtasks}
         running={running}
         viewerId={viewerId}
         canLog={canLog}

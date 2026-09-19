@@ -29,10 +29,18 @@ import {
   type Workspace,
   type SheetDetail,
   type SheetSummary,
+  type Subtask,
   type WorkspaceSummary,
 } from "@/lib/domain";
 import { isSameDay, isSameWeek } from "@/lib/duration";
 import { buildR2Url } from "@/lib/r2";
+import {
+  SHEET_MAX_COLS,
+  SHEET_MAX_ROWS,
+  normaliseCells,
+  normaliseFormats,
+  normaliseWidths,
+} from "@/lib/sheet-model";
 import {
   campaignStatusToDomain,
   dateToIso,
@@ -199,7 +207,7 @@ export const getProject = cache(async (workspaceId: string, id: string) => {
  * board.
  */
 const getAllTasks = cache(async (workspaceId: string): Promise<Task[]> => {
-  const [tasks, tracked] = await Promise.all([
+  const [tasks, tracked, subtaskCounts] = await Promise.all([
     prisma.task.findMany({
       where: { project: { workspaceId } },
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -217,9 +225,24 @@ const getAllTasks = cache(async (workspaceId: string): Promise<Task[]> => {
       where: { task: { project: { workspaceId } } },
       _sum: { minutes: true },
     }),
+    // Same reasoning for subtasks: a count per task, not every checklist item,
+    // is all the board needs.
+    prisma.subtask.groupBy({
+      by: ["taskId", "status"],
+      where: { task: { project: { workspaceId } } },
+      _count: { _all: true },
+    }),
   ]);
 
   const minutesByTask = new Map(tracked.map((row) => [row.taskId, row._sum.minutes ?? 0]));
+
+  const subtaskStatsByTask = new Map<string, { total: number; done: number }>();
+  for (const row of subtaskCounts) {
+    const current = subtaskStatsByTask.get(row.taskId) ?? { total: 0, done: 0 };
+    current.total += row._count._all;
+    if (row.status === "DONE") current.done += row._count._all;
+    subtaskStatsByTask.set(row.taskId, current);
+  }
 
   return tasks.map((task) => ({
     id: task.id,
@@ -237,11 +260,14 @@ const getAllTasks = cache(async (workspaceId: string): Promise<Task[]> => {
     estimateHours: minutesToHours(task.estimateMinutes),
     billable: task.billable,
     dueDate: dateToIso(task.dueDate),
-    subtasksTotal: task.subtasksTotal,
-    subtasksDone: task.subtasksDone,
+    subtasksTotal: subtaskStatsByTask.get(task.id)?.total ?? 0,
+    subtasksDone: subtaskStatsByTask.get(task.id)?.done ?? 0,
     trackedHours: minutesToHours(minutesByTask.get(task.id) ?? 0),
     attachmentCount: task._count.attachments,
+    coverUrl: task.coverKey ? buildR2Url(task.coverKey) : null,
     archived: task.archivedAt !== null,
+    listId: task.listId,
+    position: task.position,
   }));
 });
 
@@ -285,6 +311,7 @@ export const getTimeEntries = cache(async (workspaceId: string): Promise<TimeEnt
     note: entry.note,
     startedAt: entry.startedAt?.toISOString() ?? null,
     endedAt: entry.endedAt?.toISOString() ?? null,
+    subtaskId: entry.subtaskId,
   }));
 });
 
@@ -327,6 +354,7 @@ export const getTaskEntries = cache(
       note: entry.note,
       startedAt: entry.startedAt?.toISOString() ?? null,
       endedAt: entry.endedAt?.toISOString() ?? null,
+      subtaskId: entry.subtaskId,
       user: entry.user as Person,
     }));
   },
@@ -344,6 +372,7 @@ export const getTaskAttachments = cache(
     return rows.map((row) => ({
       id: row.id,
       taskId: row.taskId,
+      subtaskId: row.subtaskId,
       objectKey: row.objectKey,
       // Resolved here rather than in the component, so the bucket's public
       // domain is read in one place instead of everywhere an image is drawn.
@@ -357,6 +386,68 @@ export const getTaskAttachments = cache(
       createdAt: row.createdAt.toISOString(),
     }));
   },
+);
+
+/** Subtasks of one task, or of every task in a project, in the order arranged. */
+async function loadSubtasks(
+  workspaceId: string,
+  scope: { taskId: string } | { projectId: string },
+): Promise<Subtask[]> {
+  const taskWhere = {
+    ...("taskId" in scope ? { id: scope.taskId } : { projectId: scope.projectId }),
+    project: { workspaceId },
+  };
+  const [rows, tracked] = await Promise.all([
+    prisma.subtask.findMany({
+      where: { task: taskWhere },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      include: {
+        attachments: {
+          orderBy: { createdAt: "asc" },
+          select: { id: true, filename: true, objectKey: true, mimeType: true, size: true },
+        },
+      },
+    }),
+    // Summed per subtask in the database rather than by loading every entry.
+    prisma.timeEntry.groupBy({
+      by: ["subtaskId"],
+      where: { subtaskId: { not: null }, task: taskWhere },
+      _sum: { minutes: true },
+    }),
+  ]);
+
+  const minutesBySubtask = new Map(tracked.map((row) => [row.subtaskId, row._sum.minutes ?? 0]));
+
+  return rows.map((row) => ({
+    id: row.id,
+    taskId: row.taskId,
+    parentId: row.parentId,
+    title: row.title,
+    description: row.description,
+    status: taskStatusToDomain[row.status],
+    estimateMinutes: row.estimateMinutes,
+    position: row.position,
+    trackedMinutes: minutesBySubtask.get(row.id) ?? 0,
+    files: row.attachments.map((file) => ({
+      id: file.id,
+      filename: file.filename,
+      url: buildR2Url(file.objectKey),
+      mimeType: file.mimeType,
+      size: file.size,
+    })),
+  }));
+}
+
+/** A task's checklist, in the order it was arranged. */
+export const getTaskSubtasks = cache(
+  (workspaceId: string, taskId: string): Promise<Subtask[]> =>
+    loadSubtasks(workspaceId, { taskId }),
+);
+
+/** Every subtask in a project, for the board's subtasks dialog. */
+export const getProjectSubtasks = cache(
+  (workspaceId: string, projectId: string): Promise<Subtask[]> =>
+    loadSubtasks(workspaceId, { projectId }),
 );
 
 /**
@@ -387,7 +478,10 @@ export const getRunningTimer = cache(
   async (workspaceId: string, userId: string): Promise<RunningTimer | null> => {
     const timer = await prisma.taskTimer.findUnique({
       where: { userId },
-      include: { task: { include: { project: { select: { id: true, name: true, workspaceId: true } } } } },
+      include: {
+        task: { include: { project: { select: { id: true, name: true, workspaceId: true } } } },
+        subtask: { select: { title: true } },
+      },
     });
 
     // A timer started in another workspace is none of this one's business —
@@ -401,6 +495,8 @@ export const getRunningTimer = cache(
       projectName: timer.task.project.name,
       startedAt: timer.startedAt.toISOString(),
       note: timer.note,
+      subtaskId: timer.subtaskId,
+      subtaskTitle: timer.subtask?.title ?? null,
     };
   },
 );
@@ -800,29 +896,6 @@ export const getMemberPages = cache(
 
 // --- Project sheets -----------------------------------------------------------
 
-/** Hard ceilings, enforced on read and on write. */
-export const SHEET_MAX_ROWS = 200;
-export const SHEET_MAX_COLS = 26;
-export const SHEET_MAX_PER_PROJECT = 20;
-
-/**
- * Normalises stored cells to exactly `rows` × `cols`.
- *
- * Padded and trimmed rather than trusted, so a row saved short — or a grid
- * later resized — still renders as a rectangle and the component can index
- * `cells[r][c]` without guarding every access.
- */
-export function normaliseCells(value: unknown, rows: number, cols: number): string[][] {
-  const source = Array.isArray(value) ? value : [];
-
-  return Array.from({ length: rows }, (_, r) => {
-    const row = Array.isArray(source[r]) ? (source[r] as unknown[]) : [];
-    return Array.from({ length: cols }, (_, c) =>
-      typeof row[c] === "string" ? (row[c] as string) : "",
-    );
-  });
-}
-
 /** Every sheet in a project, without their cells — enough to draw the tabs. */
 export const getProjectSheets = cache(
   async (workspaceId: string, projectId: string): Promise<SheetSummary[]> => {
@@ -864,9 +937,14 @@ export const getProjectSheet = cache(
       name: sheet.name,
       assignee: (sheet.assignee as Person | null) ?? null,
       updatedAt: sheet.updatedAt.toISOString(),
+      // Every part is normalised on the way out rather than trusted: the
+      // stored JSON may predate a limit, or have been written by an import.
       cells: normaliseCells(sheet.cells, rowCount, colCount),
       rowCount,
       colCount,
+      formats: normaliseFormats(sheet.formats, rowCount, colCount),
+      colWidths: normaliseWidths(sheet.colWidths, colCount),
+      frozenRows: sheet.frozenRows > 0 ? 1 : 0,
     };
   },
 );

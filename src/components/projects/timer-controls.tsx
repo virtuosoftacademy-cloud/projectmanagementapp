@@ -77,6 +77,9 @@ export function TimerControls({
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
               </span>
               Running
+              {running.subtaskTitle ? (
+                <span className="text-muted-foreground">on {running.subtaskTitle}</span>
+              ) : null}
             </span>
 
             <Button size="sm" disabled={pending} onClick={() => run(stopTimerAction, "Timer stopped and logged.")}>

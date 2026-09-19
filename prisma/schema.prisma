@@ -262,9 +262,51 @@ model Project {
   campaigns Campaign[]
   sections  LandingSection[]
   sheets    ProjectSheet[]
+  boards    Board[]
 
   @@index([workspaceId])
   @@index([teamId])
+}
+
+/// A Trello-style board. A project may have several; each holds its own lists.
+model Board {
+  id        String @id @default(cuid())
+  projectId String
+  name      String
+  /// Order among the project's boards, so tabs keep a chosen sequence.
+  position  Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lists   BoardList[]
+
+  @@index([projectId])
+}
+
+/// A column on a board.
+///
+/// Lists are named freely — "Backlog", "QA", "Waiting on client" — but each one
+/// *counts as* one of the four task statuses. That mapping is what keeps
+/// progress, Done counts, overdue warnings and every report correct: moving a
+/// card onto a list sets the card's status to the list's, so `Task.status`
+/// always agrees with where the card sits.
+model BoardList {
+  id       String     @id @default(cuid())
+  boardId  String
+  name     String
+  status   TaskStatus
+  /// Left-to-right order on the board.
+  position Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@index([boardId])
 }
 
 /// A free-form spreadsheet. A project may have several.
@@ -278,11 +320,21 @@ model ProjectSheet {
   projectId String
   name      String
 
-  /// `string[][]`, row-major. Every cell is a string; blanks are "".
+  /// `string[][]`, row-major, exactly as typed: a formula is stored as its
+  /// text ("=SUM(A1:A3)"), never as its result, so a stored sheet can never
+  /// hold a value that disagrees with its own formula. Blanks are "".
   cells    Json
   /// Kept alongside the data so an empty grid still has a shape.
   rowCount Int  @default(20)
   colCount Int  @default(8)
+
+  /// Per-cell formatting, keyed "row:col" — only formatted cells appear, so a
+  /// mostly-plain sheet stays small. Null means nothing is formatted.
+  formats    Json?
+  /// Column widths in pixels, by index. Null means every column is default.
+  colWidths  Json?
+  /// Rows pinned to the top while scrolling — 0 or 1, as the UI offers it.
+  frozenRows Int   @default(0)
 
   /// Who is responsible for this sheet. Nullable — a sheet need not be
   /// anyone's in particular. SetNull so removing a person leaves the sheet.
@@ -325,10 +377,19 @@ model Task {
   estimateMinutes Int        @default(0)
   billable        Boolean    @default(true)
   dueDate         DateTime?  @db.Date
-  subtasksTotal   Int        @default(0)
-  subtasksDone    Int        @default(0)
-  /// Manual ordering within a board column.
+  /// Manual ordering within its list, top to bottom.
   position        Int        @default(0)
+  /// R2 object key of the image drawn across the top of the card. Null for none.
+  coverKey        String?
+
+  /// The board list this card sits in. Its status always equals the list's.
+  ///
+  /// Nullable because tasks are also created where no board is in view (the
+  /// workspace-wide Tasks page). Those land in a list the next time the
+  /// project's boards are loaded — see `ensureProjectBoards` — rather than
+  /// every create path having to know about boards. SetNull on delete for the
+  /// same reason: a card whose list vanishes is re-homed, not lost.
+  listId String?
 
   /// Set when the task is archived. Archived tasks leave the board but keep
   /// their time entries, so history stays intact — this is why archiving is
@@ -339,15 +400,59 @@ model Task {
   updatedAt DateTime @updatedAt
 
   project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  list        BoardList?       @relation(fields: [listId], references: [id], onDelete: SetNull)
   assignees   TaskAssignee[]
   entries     TimeEntry[]
   labels      TaskLabel[]
   attachments TaskAttachment[]
   timers      TaskTimer[]
+  subtasks    Subtask[]
 
   @@index([projectId])
   @@index([status])
   @@index([dueDate])
+  @@index([listId])
+}
+
+/// A checklist item on a task — its own title and done state, but no status,
+/// assignee or time tracking of its own. Kept lightweight on purpose: a task
+/// that needs those belongs on the board as a task of its own.
+/// A node in a task's subtask tree. Nests to any depth: a subtask can have
+/// subtasks of its own.
+///
+/// Every node keeps `taskId`, not only the top level, so a whole tree loads
+/// in one query and a task's deletion clears it in one cascade.
+///
+/// `parent` is SetNull rather than Cascade on purpose. MySQL gives up on
+/// cascades nested deeper than 15 levels, so a self-referencing cascade would
+/// make deep trees undeletable. Deleting a branch is done in application code
+/// (collect the subtree, delete it together); this link only has to stay
+/// valid while that happens.
+model Subtask {
+  id              String     @id @default(cuid())
+  taskId          String
+  /// Null for a top-level subtask.
+  parentId        String?
+  title           String
+  description     String     @default("") @db.Text
+  status          TaskStatus @default(TODO)
+  /// Optional, in whole minutes — what analytics compares logged time against.
+  estimateMinutes Int        @default(0)
+  /// Order among siblings, top to bottom.
+  position        Int        @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task        Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  parent      Subtask?         @relation("SubtaskTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Subtask[]        @relation("SubtaskTree")
+  entries     TimeEntry[]
+  timers      TaskTimer[]
+  attachments TaskAttachment[]
+
+  @@index([taskId])
+  @@index([parentId])
 }
 
 model TaskAssignee {
@@ -378,12 +483,19 @@ model TimeEntry {
 
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// The subtask this time was spent on, if any. The entry always belongs to
+  /// `taskId` as well, so task totals and every report include it unchanged.
+  subtaskId String?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// SetNull: deleting a subtask keeps the hours on the task.
+  subtask Subtask? @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([taskId])
   @@index([date])
+  @@index([subtaskId])
 }
 
 model Campaign {
@@ -510,11 +622,16 @@ model TaskTimer {
   /// so a refresh — or a different device — resumes at the right number.
   startedAt DateTime @default(now())
   note      String   @default("") @db.Text
+  /// The subtask being timed, if any; carried onto the entry when it stops.
+  subtaskId String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task    Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  /// SetNull: deleting the subtask keeps the timer running on the task.
+  subtask Subtask? @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
 
   @@index([taskId])
+  @@index([subtaskId])
 }
 
 /// A tag that can be put on tasks. Scoped to a workspace, so one tenant's
@@ -555,6 +672,9 @@ model TaskLabel {
 model TaskAttachment {
   id           String  @id @default(cuid())
   taskId       String
+  /// Set when the file was added to a subtask. SetNull on delete: the file
+  /// then stays on the task, the way a deleted subtask's logged time does.
+  subtaskId    String?
   objectKey    String  @unique
   filename     String
   mimeType     String
@@ -565,10 +685,12 @@ model TaskAttachment {
 
   createdAt DateTime @default(now())
 
-  task       Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  uploadedBy User? @relation("AttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  subtask    Subtask? @relation(fields: [subtaskId], references: [id], onDelete: SetNull)
+  uploadedBy User?    @relation("AttachmentUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([taskId])
+  @@index([subtaskId])
 }
 
 /// The deployment's own branding: logo, dark-mode logo, favicon.

@@ -73,7 +73,10 @@ export function ActiveTimer({
             >
               {running.taskTitle}
             </Link>
-            <span className="block text-xs text-muted-foreground">{running.projectName}</span>
+            <span className="block text-xs text-muted-foreground">
+              {running.subtaskTitle ? `${running.subtaskTitle} · ` : null}
+              {running.projectName}
+            </span>
           </p>
         ) : (
           <SelectField

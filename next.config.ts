@@ -38,9 +38,25 @@ function r2RemotePatterns(): NonNullable<NonNullable<NextConfig["images"]>["remo
   ];
 }
 
+/**
+ * The largest request a server action accepts. Next's default is 1MB.
+ *
+ * Two things here need more: an image upload (up to 10MB, sent one file per
+ * request, plus multipart overhead), and saving or importing an Excel sheet,
+ * whose cells travel as JSON. Before this was set, any image over 1MB failed
+ * at the HTTP layer before the action ever ran.
+ */
+const ACTION_BODY_LIMIT = "11mb";
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: r2RemotePatterns(),
+  },
+
+  experimental: {
+    serverActions: {
+      bodySizeLimit: ACTION_BODY_LIMIT,
+    },
   },
 
   async redirects() {
@@ -48,6 +64,12 @@ const nextConfig: NextConfig = {
       // Both people screens moved under /admin; keep old links working.
       { source: "/team", destination: "/admin/users", permanent: true },
       { source: "/teams", destination: "/admin/teams", permanent: true },
+      // Spreadsheets became Excel sheets; old links and bookmarks still land.
+      {
+        source: "/projects/project/:id/spreadsheet",
+        destination: "/projects/project/:id/excel-sheet",
+        permanent: true,
+      },
     ];
   },
 };

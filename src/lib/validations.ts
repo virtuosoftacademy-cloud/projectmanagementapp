@@ -262,6 +262,7 @@ export const projectFeaturesSchema = z.object({
 export const createTaskSchema = z.object({
   projectId: z.string().min(1, "Pick a project."),
   title: z.string().trim().min(1, "Give the task a title.").max(200),
+  description: z.string().trim().max(5000).default(""),
   status: z.enum(TASK_STATUS_VALUES as [string, ...string[]]),
   priority: z.enum(PRIORITIES as [string, ...string[]]),
   assigneeIds: z.array(z.string().min(1)).default([]),
@@ -299,6 +300,35 @@ export const archiveTaskSchema = z.object({
   taskId: z.string().min(1),
   /** False restores it to the board. */
   archived: z.boolean(),
+});
+
+// ============================================================================
+// SUBTASKS
+// ============================================================================
+
+/** An estimate on a subtask, in whole minutes: up to a working month. */
+const subtaskEstimate = z.coerce
+  .number()
+  .int("Estimate in whole minutes.")
+  .min(0, "An estimate cannot be negative.")
+  .max(60 * 24 * 31, "That estimate is more than a month.");
+
+export const createSubtaskSchema = z.object({
+  taskId: z.string().min(1),
+  /** The subtask to nest under; null or absent for a top-level one. */
+  parentId: z.string().min(1).nullable().default(null),
+  title: z.string().trim().min(1, "Give the subtask a title.").max(200),
+  description: z.string().trim().max(5000).default(""),
+  estimateMinutes: subtaskEstimate.default(0),
+});
+
+/** Only the fields present change — a status click does not resend the title. */
+export const updateSubtaskSchema = z.object({
+  subtaskId: z.string().min(1),
+  title: z.string().trim().min(1, "Give the subtask a title.").max(200).optional(),
+  description: z.string().trim().max(5000).optional(),
+  status: z.enum(TASK_STATUS_VALUES as [string, ...string[]]).optional(),
+  estimateMinutes: subtaskEstimate.optional(),
 });
 
 // ============================================================================
@@ -362,6 +392,11 @@ const timeEntryFields = {
   startedAt: optionalDateTime,
   endedAt: optionalDateTime,
   note: z.string().trim().max(500).default(""),
+  /**
+   * The subtask the time belongs to. Null clears it; absent leaves an edited
+   * entry's subtask as it was.
+   */
+  subtaskId: z.string().min(1).nullable().optional(),
 };
 
 type TimeEntryShape = {
@@ -426,6 +461,8 @@ export const updateTimeEntrySchema = z
 
 export const startTimerSchema = z.object({
   taskId: z.string().min(1, "Pick a task."),
+  /** Time a single subtask of the task; null times the task as a whole. */
+  subtaskId: z.string().min(1).nullable().default(null),
   note: z.string().trim().max(500).default(""),
 });
 

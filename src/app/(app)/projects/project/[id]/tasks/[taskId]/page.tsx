@@ -10,6 +10,7 @@ import {
   getTask,
   getTaskAttachments,
   getTaskEntries,
+  getTaskSubtasks,
 } from "@/lib/queries";
 import { getSessionUser, hasPermission, requireUser } from "@/lib/session";
 
@@ -43,17 +44,27 @@ export default async function TaskDetailPage({
   // otherwise render happily under this project's breadcrumb.
   if (!task || task.projectId !== project.id) notFound();
 
-  const [entries, attachments, running, members, labels, canManage, canLog, canManageAnyTime] =
-    await Promise.all([
-      getTaskEntries(viewer.workspaceId, task.id),
-      getTaskAttachments(viewer.workspaceId, task.id),
-      getRunningTimer(viewer.workspaceId, viewer.id),
-      getMembers(viewer.workspaceId),
-      getLabels(viewer.workspaceId),
-      hasPermission("tasks.manage"),
-      hasPermission("time.log"),
-      hasPermission("time.manage"),
-    ]);
+  const [
+    entries,
+    attachments,
+    subtasks,
+    running,
+    members,
+    labels,
+    canManage,
+    canLog,
+    canManageAnyTime,
+  ] = await Promise.all([
+    getTaskEntries(viewer.workspaceId, task.id),
+    getTaskAttachments(viewer.workspaceId, task.id),
+    getTaskSubtasks(viewer.workspaceId, task.id),
+    getRunningTimer(viewer.workspaceId, viewer.id),
+    getMembers(viewer.workspaceId),
+    getLabels(viewer.workspaceId),
+    hasPermission("tasks.manage"),
+    hasPermission("time.log"),
+    hasPermission("time.manage"),
+  ]);
 
   return (
     <TaskDetail
@@ -62,6 +73,7 @@ export default async function TaskDetailPage({
       projectName={project.name}
       entries={entries}
       attachments={attachments}
+      subtasks={subtasks}
       running={running}
       members={members}
       labels={labels}

@@ -52,7 +52,7 @@ export type ProjectFeature =
   | "landing-pages"
   | "time-tracking"
   | "timesheet"
-  | "spreadsheet"
+  | "excel-sheet"
   | "report";
 
 /** The minimum needed to render someone: avatar, name, link. */
@@ -92,12 +92,39 @@ export type SheetSummary = {
   updatedAt: string;
 };
 
+/** How a cell's value is shown. Stored values are never changed by it. */
+export type NumberFormat = "general" | "number" | "currency" | "percent" | "date";
+
+/** One cell's formatting. Absent keys mean the default. */
+export type CellFormat = {
+  bold?: boolean;
+  italic?: boolean;
+  align?: "left" | "center" | "right";
+  numberFormat?: NumberFormat;
+  /** Decimal places for number, currency and percent. */
+  decimals?: number;
+};
+
+/**
+ * Formatting for a whole sheet, keyed `"row:col"` (zero-based). Only cells
+ * that have been formatted appear, so a mostly plain sheet stays small.
+ */
+export type SheetFormats = Record<string, CellFormat>;
+
 /** A sheet with its contents. */
 export type SheetDetail = SheetSummary & {
-  /** Row-major `string[][]`, always exactly `rowCount` × `colCount`. */
+  /**
+   * Row-major `string[][]`, always exactly `rowCount` × `colCount`, exactly as
+   * typed: formulas are kept as their text ("=SUM(A1:A3)"), never as results.
+   */
   cells: string[][];
   rowCount: number;
   colCount: number;
+  formats: SheetFormats;
+  /** Pixel width per column; a missing entry means the default width. */
+  colWidths: number[];
+  /** Rows pinned while scrolling — 0 or 1. */
+  frozenRows: number;
 };
 
 /** A workspace as it appears in the switcher — with the caller's role in it. */
@@ -161,8 +188,34 @@ export type Task = {
   /** Hours logged against this task by everyone, from its time entries. */
   trackedHours: number;
   attachmentCount: number;
+  /** Image across the top of the card and the task page; null for none. */
+  coverUrl: string | null;
   /** Archived tasks keep their history but leave the board. */
   archived: boolean;
+  /** The board list the card sits in; null until it is first placed. */
+  listId: string | null;
+  /** Order within that list, top to bottom. */
+  position: number;
+};
+
+/**
+ * A column on a board. Named freely, but it *counts as* one task status —
+ * which is what keeps progress and every report correct however the lists are
+ * arranged. A card on a list always has that list's status.
+ */
+export type BoardList = {
+  id: string;
+  name: string;
+  status: TaskStatus;
+  position: number;
+};
+
+/** A Trello-style board. A project may have several. */
+export type Board = {
+  id: string;
+  name: string;
+  position: number;
+  lists: BoardList[];
 };
 
 export type TimeEntry = {
@@ -180,6 +233,8 @@ export type TimeEntry = {
    */
   startedAt: string | null;
   endedAt: string | null;
+  /** The subtask the time was spent on, if any. It counts toward the task either way. */
+  subtaskId: string | null;
 };
 
 /** A time entry with the person who logged it, as the task detail lists them. */
@@ -198,6 +253,9 @@ export type RunningTimer = {
   projectName: string;
   startedAt: string;
   note: string;
+  /** Set when the timer runs on one subtask of the task rather than the task as a whole. */
+  subtaskId: string | null;
+  subtaskTitle: string | null;
 };
 
 /**
@@ -210,6 +268,8 @@ export type RunningTimer = {
 export type Attachment = {
   id: string;
   taskId: string;
+  /** Set when the file was added to a subtask rather than the task itself. */
+  subtaskId: string | null;
   objectKey: string;
   url: string;
   filename: string;
@@ -220,6 +280,35 @@ export type Attachment = {
   height: number | null;
   uploadedBy: Person | null;
   createdAt: string;
+};
+
+/**
+ * A node in a task's subtask tree. Stored flat; `lib/subtask-tree.ts` builds
+ * the branches. Its status is independent of the task's — a parent shows its
+ * children's progress but is never moved by it.
+ */
+export type Subtask = {
+  id: string;
+  taskId: string;
+  /** Null for a top-level subtask. */
+  parentId: string | null;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  estimateMinutes: number;
+  position: number;
+  /** Minutes logged directly on this subtask — not its children. */
+  trackedMinutes: number;
+  files: SubtaskFile[];
+};
+
+/** A file on a subtask — just what the subtask's details dialog lists. */
+export type SubtaskFile = {
+  id: string;
+  filename: string;
+  url: string;
+  mimeType: string;
+  size: number;
 };
 
 /**
@@ -322,9 +411,9 @@ export const PROJECT_FEATURES: { key: ProjectFeature; label: string; hint: strin
   },
   { key: "campaigns", label: "Campaigns", hint: "Marketing campaigns and their budgets." },
   {
-    key: "spreadsheet",
-    label: "Spreadsheets",
-    hint: "Free-form grids for this project — name them, assign them, export to CSV.",
+    key: "excel-sheet",
+    label: "Excel Sheets",
+    hint: "Spreadsheets with formulas and formatting — import and export .xlsx.",
   },
   { key: "report", label: "Reports", hint: "Cost, hours and status summary." },
 ];

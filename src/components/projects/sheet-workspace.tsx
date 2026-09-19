@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CircleAlert, Plus, Trash2, UserRound } from "lucide-react";
+import { CircleAlert, Plus, Trash2, Upload, UserRound } from "lucide-react";
 import {
   assignSheetAction,
   createSheetAction,
   deleteSheetAction,
+  importSheetsAction,
   renameSheetAction,
-} from "@/app/(app)/projects/project/[id]/spreadsheet/actions";
+} from "@/app/(app)/projects/project/[id]/excel-sheet/actions";
 import { SheetGrid } from "@/components/projects/sheet-grid";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -19,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import type { Member, SheetDetail, SheetSummary } from "@/lib/domain";
+import { readCsv, readWorkbook } from "@/lib/sheet-io";
 import { cn } from "@/lib/utils";
 
 /** Radix rejects an empty option value, so "nobody" travels as a sentinel. */
@@ -56,9 +58,47 @@ export function SheetWorkspace({
   const [renaming, setRenaming] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [draftName, setDraftName] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Adds a sheet per worksheet in an .xlsx, or one sheet for a .csv.
+   *
+   * The file is parsed here in the browser and only its contents are sent, so
+   * no binary format reaches a server action. Anything cut to fit the grid's
+   * limits is reported rather than dropped silently.
+   */
+  function importFile(file: File) {
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      let report;
+      try {
+        report = /\.csv$/i.test(file.name) ? await readCsv(file) : await readWorkbook(file);
+      } catch {
+        setError(`${file.name} could not be read as an Excel or CSV file.`);
+        return;
+      }
+
+      const result = await importSheetsAction({ projectId, sheets: report.sheets });
+      if (!result.ok) {
+        setError(result.error ?? "That import did not work.");
+        return;
+      }
+
+      const count = report.sheets.length;
+      setNotice(
+        `Imported ${count} sheet${count === 1 ? "" : "s"} from ${file.name}.` +
+          (report.truncated.length
+            ? ` Some were larger than a sheet can hold and were cut: ${report.truncated.join("; ")}.`
+            : ""),
+      );
+      if (result.sheetId) open(result.sheetId);
+    });
+  }
 
   function open(sheetId: string) {
-    router.push(`/projects/project/${projectId}/spreadsheet?sheet=${sheetId}`);
+    router.push(`/projects/project/${projectId}/excel-sheet?sheet=${sheetId}`);
   }
 
   function run(action: () => Promise<{ ok: boolean; error?: string; sheetId?: string }>) {
@@ -108,21 +148,50 @@ export function SheetWorkspace({
         ))}
 
         {canEdit ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={pending}
-            onClick={() => {
-              setDraftName(`Sheet ${sheets.length + 1}`);
-              setError(null);
-              setCreating(true);
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            New sheet
-          </Button>
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => {
+                setDraftName(`Sheet ${sheets.length + 1}`);
+                setError(null);
+                setCreating(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              New sheet
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pending}
+              onClick={() => fileRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {pending ? "Importing…" : "Import"}
+            </Button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // Reset, so importing the same file twice in a row still fires.
+                event.target.value = "";
+                if (file) importFile(file);
+              }}
+            />
+          </>
         ) : null}
       </div>
+
+      {notice ? (
+        <p role="status" className="rounded-md border bg-muted/40 p-3 text-sm">
+          {notice}
+        </p>
+      ) : null}
 
       {error ? (
         <p
@@ -210,9 +279,14 @@ export function SheetWorkspace({
             sheetId={active.id}
             sheetName={active.name}
             projectName={projectName}
-            initialCells={active.cells}
-            initialRows={active.rowCount}
-            initialCols={active.colCount}
+            initial={{
+              cells: active.cells,
+              rowCount: active.rowCount,
+              colCount: active.colCount,
+              formats: active.formats,
+              colWidths: active.colWidths,
+              frozenRows: active.frozenRows,
+            }}
             canEdit={canEdit}
             updatedAt={active.updatedAt}
           />

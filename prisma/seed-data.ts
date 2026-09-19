@@ -161,7 +161,24 @@ export const tasks = [
   { key: "wireframe", project: "website-redesign", title: "Wireframe", status: "DONE", priority: "MEDIUM", assignees: ["emma@company.com"], estimateMinutes: 120, billable: true },
   { key: "visual-design", project: "website-redesign", title: "Visual Design", status: "DONE", priority: "HIGH", assignees: ["emma@company.com"], estimateMinutes: 240, billable: true },
   { key: "write-copy", project: "website-redesign", title: "Write Copy", status: "IN_PROGRESS", priority: "MEDIUM", assignees: ["emma@company.com"], estimateMinutes: 120, billable: true, dueDate: day(1) },
-  { key: "landing-page", project: "website-redesign", title: "Develop Landing Page", status: "IN_PROGRESS", priority: "HIGH", assignees: ["alex@company.com", "emma@company.com"], estimateMinutes: 960, billable: true, dueDate: day(11), subtasksTotal: 5, subtasksDone: 2 },
+  { key: "landing-page", project: "website-redesign", title: "Develop Landing Page", status: "IN_PROGRESS", priority: "HIGH", assignees: ["alex@company.com", "emma@company.com"], estimateMinutes: 960, billable: true, dueDate: day(11), subtasks: [
+    { key: "hero", title: "Hero section", status: "DONE", estimateMinutes: 120, children: [
+      { key: "hero-copy", title: "Headline copy", status: "DONE", estimateMinutes: 30 },
+      { key: "hero-art", title: "Hero illustration", status: "DONE", estimateMinutes: 60 },
+    ] },
+    { key: "features", title: "Features grid", status: "DONE", estimateMinutes: 90 },
+    { key: "pricing", title: "Pricing table", status: "IN_PROGRESS", estimateMinutes: 60, children: [
+      { key: "pricing-tiers", title: "Tier cards", status: "IN_REVIEW", estimateMinutes: 60 },
+      { key: "pricing-toggle", title: "Monthly / yearly toggle", status: "IN_PROGRESS", estimateMinutes: 45, children: [
+        { key: "pricing-badge", title: "Discount badge", status: "TODO", estimateMinutes: 20 },
+      ] },
+    ] },
+    { key: "contact", title: "Contact form", status: "TODO", estimateMinutes: 60, children: [
+      { key: "contact-validation", title: "Validation", status: "TODO" },
+      { key: "contact-spam", title: "Spam protection", status: "TODO" },
+    ] },
+    { key: "qa", title: "Responsive QA", status: "TODO", estimateMinutes: 90 },
+  ] },
   { key: "cicd", project: "website-redesign", title: "Set up CI/CD pipeline", status: "TODO", priority: "HIGH", assignees: ["alex@company.com"], estimateMinutes: 180, billable: false, dueDate: day(8) },
   { key: "footer", project: "website-redesign", title: "Footer component", status: "TODO", priority: "LOW", assignees: ["alex@company.com"], estimateMinutes: 90, billable: true },
   { key: "a11y-audit", project: "website-redesign", title: "Accessibility audit", status: "TODO", priority: "MEDIUM", assignees: ["emma@company.com", "alex@company.com"], estimateMinutes: 240, billable: true },
@@ -181,6 +198,14 @@ export const timeEntries = [
   { date: day(-2), email: "alex@company.com", task: "auth-flow", minutes: 200, billable: true, note: "OAuth integration" },
   { date: day(-1), email: "emma@company.com", task: "visual-design", minutes: 60, billable: true, note: "Final design revisions" },
   { date: day(0), email: "alex@company.com", task: "cicd", minutes: 120, billable: false, note: "Pipeline setup" },
+  // Landing page time, most of it on specific subtasks, one entry on the task as a whole.
+  { date: day(-6), email: "alex@company.com", task: "landing-page", subtask: "hero", minutes: 90, billable: true, note: "Hero layout" },
+  { date: day(-6), email: "emma@company.com", task: "landing-page", subtask: "hero-copy", minutes: 35, billable: true, note: "Headline options" },
+  { date: day(-5), email: "emma@company.com", task: "landing-page", subtask: "hero-art", minutes: 70, billable: true, note: "Illustration" },
+  { date: day(-4), email: "emma@company.com", task: "landing-page", subtask: "features", minutes: 75, billable: true, note: "Features grid" },
+  { date: day(-2), email: "alex@company.com", task: "landing-page", subtask: "pricing-tiers", minutes: 50, billable: true, note: "Tier cards" },
+  { date: day(-1), email: "alex@company.com", task: "landing-page", subtask: "pricing-toggle", minutes: 40, billable: true, note: "Toggle state" },
+  { date: day(-1), email: "emma@company.com", task: "landing-page", minutes: 30, billable: true, note: "Design review" },
 ] as const;
 
 export const campaigns = [

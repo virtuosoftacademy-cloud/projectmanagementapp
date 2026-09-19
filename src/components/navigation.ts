@@ -168,9 +168,9 @@ const FEATURE_ITEMS: Record<
   // picker and never shown in the nav. The route stays reachable by URL for
   // any project that already had it stored.
   timesheet: { title: "Timesheet", segment: "timesheet", icon: Clock, roles: EVERYONE },
-  spreadsheet: {
-    title: "Spreadsheets",
-    segment: "spreadsheet",
+  "excel-sheet": {
+    title: "Excel Sheets",
+    segment: "excel-sheet",
     icon: Sheet,
     roles: EVERYONE,
   },
