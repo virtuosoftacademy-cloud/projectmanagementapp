@@ -182,7 +182,6 @@ export function TaskDialog({
 
         <Field label="Cover image">
           <FilePicker
-            preview
             value={draft.cover}
             onChange={(file) => set("cover", file)}
             accept={ACCEPT_ATTRIBUTE}

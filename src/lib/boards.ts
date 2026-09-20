@@ -16,11 +16,17 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import type { TaskStatus as DbTaskStatus } from "@/lib/generated/prisma/enums";
 import { taskStatusToDomain } from "@/lib/mappers";
-import { TASK_STATUSES, type Board } from "@/lib/domain";
+import type { Board } from "@/lib/domain";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
-/** The lists a new board starts with: one per status, as the board always looked. */
+/**
+ * The lists every board has — one per status, in this order, always.
+ *
+ * Lists are fixed rather than free-form: a list *is* a status, so a board can
+ * neither gain, lose nor rename one. `ensureBoardLists` repairs any board that
+ * drifted from this shape.
+ */
 export const DEFAULT_LISTS: { name: string; status: DbTaskStatus }[] = [
   { name: "To Do", status: "TODO" },
   { name: "In Progress", status: "IN_PROGRESS" },
@@ -42,12 +48,8 @@ export async function createBoardWithLists(db: Db, projectId: string, name: stri
 }
 
 /**
- * The first list on a board that counts as `status`, creating one at the end
- * if the board has none.
- *
- * Creating rather than failing matters: someone may have deleted a board's
- * "Done" list, and marking a card done from the task page must still work.
- * The new list is named after the status, so it is obvious where it came from.
+ * The list on a board that counts as `status`, creating it if the board is
+ * missing it — a board always ends up with all four.
  */
 export async function listForStatus(db: Db, boardId: string, status: DbTaskStatus) {
   const existing = await db.boardList.findFirst({
@@ -57,17 +59,56 @@ export async function listForStatus(db: Db, boardId: string, status: DbTaskStatu
   });
   if (existing) return existing;
 
-  const last = await db.boardList.aggregate({ where: { boardId }, _max: { position: true } });
-  const label = TASK_STATUSES.find((item) => item.status === taskStatusToDomain[status])?.label;
+  const fixed = DEFAULT_LISTS.find((list) => list.status === status)!;
   return db.boardList.create({
     data: {
       boardId,
       status,
-      name: label ?? status,
-      position: (last._max.position ?? -1) + 1,
+      name: fixed.name,
+      position: DEFAULT_LISTS.indexOf(fixed),
     },
     select: { id: true },
   });
+}
+
+/**
+ * Bring a board back to the four fixed lists: one per status, correctly named
+ * and ordered.
+ *
+ * Boards made before lists were fixed may be missing one, hold two that count
+ * as the same status, or carry a name someone changed. Cards on a surplus list
+ * move to the keeper for that status — never deleted — and the surplus goes.
+ */
+export async function ensureBoardLists(db: Db, boardId: string) {
+  const lists = await db.boardList.findMany({
+    where: { boardId },
+    orderBy: { position: "asc" },
+    select: { id: true, name: true, status: true, position: true },
+  });
+
+  for (const [position, fixed] of DEFAULT_LISTS.entries()) {
+    const matching = lists.filter((list) => list.status === fixed.status);
+    const keeper = matching[0];
+
+    if (!keeper) {
+      await db.boardList.create({
+        data: { boardId, status: fixed.status, name: fixed.name, position },
+      });
+      continue;
+    }
+
+    if (keeper.name !== fixed.name || keeper.position !== position) {
+      await db.boardList.update({
+        where: { id: keeper.id },
+        data: { name: fixed.name, position },
+      });
+    }
+
+    for (const surplus of matching.slice(1)) {
+      await db.task.updateMany({ where: { listId: surplus.id }, data: { listId: keeper.id } });
+      await db.boardList.delete({ where: { id: surplus.id } });
+    }
+  }
 }
 
 /** The next free position at the bottom of a list. */
@@ -92,6 +133,10 @@ export async function ensureProjectBoards(projectId: string) {
     select: { id: true },
   });
   if (!first) first = await createBoardWithLists(prisma, projectId, "Main board", 0);
+
+  // Every board keeps its four lists, including ones made before that was so.
+  const boards = await prisma.board.findMany({ where: { projectId }, select: { id: true } });
+  for (const board of boards) await ensureBoardLists(prisma, board.id);
 
   const unplaced = await prisma.task.findMany({
     where: { projectId, listId: null },

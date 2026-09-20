@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { formatDay } from "@/lib/domain";
 import { can } from "@/lib/permissions";
 import { getMembers, getProject, getProjectStats, getTeams } from "@/lib/queries";
+import { probe } from "@/lib/probe";
 import { getSessionUser, requireUser } from "@/lib/session";
 import { statusVariant, taskStatusColor } from "@/lib/status";
 import { formatPkr } from "@/lib/utils";
@@ -29,6 +30,7 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
   const viewer = await requireUser();
   const { id } = await params;
   const project = await getProject(viewer.workspaceId, id);
+  probe("overview", { id, workspaceId: viewer.workspaceId, found: Boolean(project) });
   if (!project) notFound();
 
   const [stats, members, teams] = await Promise.all([

@@ -73,6 +73,8 @@ export function ProjectTasksTab({
         canManage={canManage}
         canLog={canLog}
         subtasks={subtasks}
+        members={members}
+        labels={labels}
         running={running}
         onSelectBoard={(id) =>
           router.push(`/projects/project/${projectId}/tasks?board=${id}`, { scroll: false })

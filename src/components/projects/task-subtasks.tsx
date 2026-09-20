@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition, type ReactNode } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   AlignLeft,
   Circle,
   CircleAlert,
   FileText,
-  ImageIcon,
   Info,
   Paperclip,
   CircleCheck,
@@ -15,6 +15,7 @@ import {
   CircleEllipsis,
   CornerDownRight,
   Minus,
+  MoreHorizontal,
   Pencil,
   Play,
   Plus,
@@ -50,6 +51,7 @@ import {
   MAX_SIZE,
   formatBytes,
   isImageMimeType,
+  isOptimizableImageSrc,
   validateAttachmentFile,
 } from "@/lib/r2";
 import { taskStatusColor } from "@/lib/status";
@@ -562,38 +564,133 @@ function SubtaskBranch({
         />
       ) : null}
 
-      <FormDialog open={viewing} onClose={() => setViewing(false)} title={node.title}>
-        <div className="grid gap-4 py-2">
-          {node.description ? (
-            <p className="whitespace-pre-wrap text-sm">{node.description}</p>
-          ) : null}
-          {node.files.length ? (
-            <ul className="space-y-1.5">
-              {node.files.map((file) => (
-                <li key={file.id}>
-                  <a
-                    href={file.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/40"
-                  >
-                    {isImageMimeType(file.mimeType) ? (
-                      <ImageIcon aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <FileText aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">{file.filename}</span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {formatBytes(file.size)}
-                    </span>
-                  </a>
-                </li>
-              ))}
-            </ul>
+      {viewing ? (
+        <SubtaskDetailsDialog
+          subtask={node}
+          canManage={actions.canManage}
+          onClose={() => setViewing(false)}
+          onEdit={() => {
+            setViewing(false);
+            setEditing(true);
+          }}
+          onAddChild={() => {
+            setViewing(false);
+            setAdding(true);
+          }}
+          onDelete={() => {
+            setViewing(false);
+            actions.remove(node);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One subtask, read-only: what it says, what is attached, and its actions.
+ * Shared by the mind map and by the rows drawn under a board card.
+ */
+export function SubtaskDetailsDialog({
+  subtask,
+  canManage,
+  onClose,
+  onEdit,
+  onDelete,
+  onAddChild,
+}: {
+  subtask: Subtask;
+  canManage: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onAddChild: () => void;
+}) {
+  const label = TASK_STATUSES.find((item) => item.status === subtask.status)?.label;
+
+  return (
+    <FormDialog open onClose={onClose} title={subtask.title}>
+      <div className="grid gap-4 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span
+              className="rounded px-2 py-0.5 font-medium text-white"
+              style={{ backgroundColor: taskStatusColor[subtask.status] }}
+            >
+              {label}
+            </span>
+            <span className="font-mono text-muted-foreground">
+              {formatMinutes(subtask.trackedMinutes)}
+              {subtask.estimateMinutes
+                ? ` / ${formatMinutes(subtask.estimateMinutes)}`
+                : " / no estimate"}
+            </span>
+          </div>
+
+          {canManage ? (
+            <DropdownMenu modal={false}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={`Actions for ${subtask.title}`}>
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem onSelect={onEdit}>
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onAddChild}>
+                  <CornerDownRight className="h-3.5 w-3.5" />
+                  Add subtask
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
         </div>
-      </FormDialog>
-    </div>
+
+        {subtask.description ? (
+          <p className="whitespace-pre-wrap text-sm">{subtask.description}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">No description.</p>
+        )}
+
+        {subtask.files.length ? (
+          <ul className="space-y-1.5">
+            {subtask.files.map((file) => (
+              <li key={file.id}>
+                <a
+                  href={file.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-2 rounded-md border p-2 text-sm hover:bg-muted/40"
+                >
+                  {isImageMimeType(file.mimeType) ? (
+                    <Image
+                      src={file.url}
+                      alt={file.filename}
+                      width={64}
+                      height={40}
+                      className="h-10 w-16 shrink-0 rounded border object-cover"
+                      unoptimized={!isOptimizableImageSrc(file.url)}
+                    />
+                  ) : (
+                    <FileText aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{file.filename}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {formatBytes(file.size)}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </FormDialog>
   );
 }
 

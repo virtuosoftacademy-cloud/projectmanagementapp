@@ -3,8 +3,6 @@
 import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
-  ArrowRight,
   CircleAlert,
   MoreHorizontal,
   Pencil,
@@ -13,9 +11,13 @@ import {
   X,
 } from "lucide-react";
 import { BoardCard } from "@/components/projects/board-card";
+import { TaskEditDialog } from "@/components/projects/task-edit-dialog";
+import { deleteTaskAction } from "@/lib/actions";
+import { updateTaskAction } from "@/lib/task-actions";
 import {
   AddSubtaskDialog,
   EditSubtaskDialog,
+  SubtaskDetailsDialog,
   createSubtaskWithFile,
   saveSubtaskEdit,
 } from "@/components/projects/task-subtasks";
@@ -23,7 +25,6 @@ import { formatMinutes } from "@/lib/duration";
 import { subtreeIds } from "@/lib/subtask-tree";
 import {
   BoardNameDialog,
-  ListDialog,
   MoveCardDialog,
   SubtasksDialog,
 } from "@/components/projects/board-dialogs";
@@ -33,7 +34,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { FilePicker } from "@/components/ui/file-picker";
@@ -54,18 +54,15 @@ import {
 import {
   addCardAction,
   createBoardAction,
-  createListAction,
   deleteBoardAction,
-  deleteListAction,
   moveCardAction,
-  moveListAction,
   renameBoardAction,
-  updateListAction,
 } from "@/lib/board-actions";
 import {
-  TASK_STATUSES,
   type Board,
   type BoardList,
+  type Label,
+  type Member,
   type RunningTimer,
   type Subtask,
   type Task,
@@ -116,12 +113,12 @@ type Dialog =
   | { kind: "new-board" }
   | { kind: "rename-board" }
   | { kind: "delete-board" }
-  | { kind: "new-list" }
-  | { kind: "edit-list"; list: BoardList }
-  | { kind: "delete-list"; list: BoardList }
   | { kind: "move-card"; task: Task }
+  | { kind: "edit-card"; task: Task }
+  | { kind: "delete-card"; task: Task }
   | { kind: "subtasks"; taskId: string }
-  | { kind: "add-subtask"; taskId: string; parentId: string; parentTitle: string }
+  | { kind: "add-subtask"; taskId: string; parentId: string | null; parentTitle: string }
+  | { kind: "open-subtask"; subtask: Subtask }
   | { kind: "edit-subtask"; subtask: Subtask }
   | { kind: "delete-subtask"; subtask: Subtask }
   | null;
@@ -148,6 +145,8 @@ export function TrelloBoard({
   canManage,
   canLog,
   subtasks,
+  members,
+  labels,
   running,
   onSelectBoard,
 }: {
@@ -169,6 +168,9 @@ export function TrelloBoard({
   canLog: boolean;
   /** Every subtask in the project; each card's dialog picks out its own. */
   subtasks: Subtask[];
+  /** For the card's Edit dialog — its assignee and label pickers. */
+  members: Member[];
+  labels: Label[];
   running: RunningTimer | null;
   onSelectBoard: (boardId: string) => void;
 }) {
@@ -186,6 +188,20 @@ export function TrelloBoard({
     for (const item of subtasks) map.set(item.taskId, [...(map.get(item.taskId) ?? []), item]);
     return map;
   }, [subtasks]);
+
+  /** Deleting a card takes its time entries with it, so the dialog says so. */
+  function describeCardRemoval(task: Task | undefined) {
+    if (!task) return "";
+    const logged = Math.round(task.trackedHours * 60);
+    return [
+      "The card, its subtasks and its files are deleted.",
+      logged
+        ? `The ${formatMinutes(logged)} logged against it goes too, so reports will change. Archive it from the task page to keep that time.`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
 
   function describeSubtaskRemoval(subtask: Subtask) {
     const branch = subtreeIds(subtasksByTask.get(subtask.taskId) ?? [], subtask.id);
@@ -323,9 +339,6 @@ export function TrelloBoard({
   const moving = dialog?.kind === "move-card" ? dialog.task : null;
   const subtasksTask =
     dialog?.kind === "subtasks" ? tasks.find((task) => task.id === dialog.taskId) : undefined;
-  const statusLabel = (status: TaskStatus) =>
-    TASK_STATUSES.find((item) => item.status === status)?.label ?? status;
-
   return (
     <div className="space-y-3">
       {/* Board tabs */}
@@ -396,7 +409,7 @@ export function TrelloBoard({
 
       {/* Lists */}
       <div className="flex items-start gap-3 overflow-x-auto pb-4">
-        {lists.map((list, listIndex) => {
+        {lists.map((list) => {
           const cards = visibleIn(list.id);
           const total = allIn(list.id).length;
           const isTarget = drop?.listId === list.id;
@@ -414,52 +427,8 @@ export function TrelloBoard({
                 <span className="font-mono text-xs text-muted-foreground">
                   {cards.length === total ? total : `${cards.length}/${total}`}
                 </span>
-                {canManage ? (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        aria-label={`Options for ${list.name}`}
-                      >
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onSelect={() => setDialog({ kind: "edit-list", list })}>
-                        <Pencil className="h-4 w-4" />
-                        Rename or change status
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={listIndex === 0}
-                        onSelect={() => run(() => moveListAction({ listId: list.id, direction: -1 }))}
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        Move left
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={listIndex === lists.length - 1}
-                        onSelect={() => run(() => moveListAction({ listId: list.id, direction: 1 }))}
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                        Move right
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onSelect={() => setDialog({ kind: "delete-list", list })}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete list
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                ) : null}
               </header>
-              <p className="px-3 pb-2 text-[11px] text-muted-foreground">
-                Counts as {statusLabel(list.status)}
-              </p>
+              <div className="pb-1" />
 
               <div
                 className={cn(
@@ -516,20 +485,25 @@ export function TrelloBoard({
                           setDrop(null);
                         }}
                         onMoveRequest={() => setDialog({ kind: "move-card", task })}
+                        onEditRequest={() => setDialog({ kind: "edit-card", task })}
+                        onAddCardSubtaskRequest={() =>
+                          setDialog({
+                            kind: "add-subtask",
+                            taskId: task.id,
+                            parentId: null,
+                            parentTitle: task.title,
+                          })
+                        }
+                        onDeleteRequest={() => setDialog({ kind: "delete-card", task })}
                         onSubtasksRequest={() => setDialog({ kind: "subtasks", taskId: task.id })}
+                        onOpenSubtaskRequest={(subtask) =>
+                          setDialog({ kind: "open-subtask", subtask })
+                        }
                         onEditSubtaskRequest={(subtask) =>
                           setDialog({ kind: "edit-subtask", subtask })
                         }
                         onDeleteSubtaskRequest={(subtask) =>
                           setDialog({ kind: "delete-subtask", subtask })
-                        }
-                        onAddSubtaskRequest={(parent) =>
-                          setDialog({
-                            kind: "add-subtask",
-                            taskId: task.id,
-                            parentId: parent.id,
-                            parentTitle: parent.title,
-                          })
                         }
                       />
                     </div>
@@ -570,18 +544,6 @@ export function TrelloBoard({
             </section>
           );
         })}
-
-        {canManage ? (
-          <Button
-            variant="outline"
-            className="h-auto w-72 shrink-0 justify-start border-dashed py-3"
-            disabled={pending}
-            onClick={() => setDialog({ kind: "new-list" })}
-          >
-            <Plus className="h-4 w-4" />
-            Add another list
-          </Button>
-        ) : null}
       </div>
 
       {/* Dialogs — keyed so each opening starts from fresh values. */}
@@ -623,47 +585,6 @@ export function TrelloBoard({
         description={`Its ${optimistic.filter((task) => lists.some((list) => list.id === task.listId)).length} cards move to ${boards.find((item) => item.id !== board.id)?.name ?? "another board"}, each onto a list with the same status. No card is deleted.`}
       />
 
-      {dialog?.kind === "new-list" ? (
-        <ListDialog
-          key="new-list"
-          open
-          title="Add a list"
-          initial={{ name: "", status: "todo" }}
-          submitLabel={pending ? "Adding…" : "Add list"}
-          pending={pending}
-          error={error}
-          onClose={() => setDialog(null)}
-          onSubmit={(value) => run(() => createListAction({ boardId: board.id, ...value }))}
-        />
-      ) : null}
-
-      {dialog?.kind === "edit-list" ? (
-        <ListDialog
-          key={`edit-${dialog.list.id}`}
-          open
-          title="Edit list"
-          initial={{ name: dialog.list.name, status: dialog.list.status }}
-          cardCount={allIn(dialog.list.id).length}
-          submitLabel={pending ? "Saving…" : "Save"}
-          pending={pending}
-          error={error}
-          onClose={() => setDialog(null)}
-          onSubmit={(value) => run(() => updateListAction({ listId: dialog.list.id, ...value }))}
-        />
-      ) : null}
-
-      <ConfirmDialog
-        open={dialog?.kind === "delete-list"}
-        onClose={() => setDialog(null)}
-        onConfirm={() => dialog?.kind === "delete-list" && run(() => deleteListAction(dialog.list.id))}
-        blocked={dialog?.kind === "delete-list" && allIn(dialog.list.id).length > 0}
-        title={dialog?.kind === "delete-list" ? `Delete ${dialog.list.name}?` : ""}
-        description={
-          dialog?.kind === "delete-list" && allIn(dialog.list.id).length > 0
-            ? `It still has ${allIn(dialog.list.id).length} card${allIn(dialog.list.id).length === 1 ? "" : "s"}. Move them to another list first.`
-            : "The list is empty, so nothing else is affected."
-        }
-      />
 
       {moving ? (
         <MoveCardDialog
@@ -687,19 +608,20 @@ export function TrelloBoard({
         <SubtasksDialog
           key={subtasksTask.id}
           open
-          taskId={subtasksTask.id}
-          taskTitle={subtasksTask.title}
+          task={subtasksTask}
           subtasks={subtasksByTask.get(subtasksTask.id) ?? []}
           running={running}
           canManage={canManage}
           canLog={canLog}
           onClose={() => setDialog(null)}
+          onEdit={() => setDialog({ kind: "edit-card", task: subtasksTask })}
+          onDelete={() => setDialog({ kind: "delete-card", task: subtasksTask })}
         />
       ) : null}
 
       {dialog?.kind === "add-subtask" ? (
         <AddSubtaskDialog
-          key={dialog.parentId}
+          key={dialog.parentId ?? dialog.taskId}
           parentTitle={dialog.parentTitle}
           pending={pending}
           error={error}
@@ -709,6 +631,51 @@ export function TrelloBoard({
               () => createSubtaskWithFile(dialog.taskId, dialog.parentId, values),
               () => setDialog(null),
             )
+          }
+        />
+      ) : null}
+
+      {dialog?.kind === "edit-card" ? (
+        <TaskEditDialog
+          key={dialog.task.id}
+          open
+          task={dialog.task}
+          members={members}
+          labels={labels}
+          pending={pending}
+          error={error}
+          onClose={() => setDialog(null)}
+          onSubmit={(values) => run(() => updateTaskAction(values))}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={dialog?.kind === "delete-card"}
+        onClose={() => setDialog(null)}
+        onConfirm={() => {
+          if (dialog?.kind !== "delete-card") return;
+          run(() => deleteTaskAction(dialog.task.id));
+        }}
+        confirmLabel="Delete"
+        title={dialog?.kind === "delete-card" ? `Delete ${dialog.task.title}?` : "Delete card?"}
+        description={describeCardRemoval(dialog?.kind === "delete-card" ? dialog.task : undefined)}
+      />
+
+      {dialog?.kind === "open-subtask" ? (
+        <SubtaskDetailsDialog
+          key={dialog.subtask.id}
+          subtask={dialog.subtask}
+          canManage={canManage}
+          onClose={() => setDialog(null)}
+          onEdit={() => setDialog({ kind: "edit-subtask", subtask: dialog.subtask })}
+          onDelete={() => setDialog({ kind: "delete-subtask", subtask: dialog.subtask })}
+          onAddChild={() =>
+            setDialog({
+              kind: "add-subtask",
+              taskId: dialog.subtask.taskId,
+              parentId: dialog.subtask.id,
+              parentTitle: dialog.subtask.title,
+            })
           }
         />
       ) : null}
@@ -810,7 +777,6 @@ function AddCardForm({
         onChange={(event) => set("description", event.target.value)}
       />
       <FilePicker
-        preview
         value={value.cover}
         onChange={(file) => set("cover", file)}
         accept={ACCEPT_ATTRIBUTE}

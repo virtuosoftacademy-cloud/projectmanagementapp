@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { FileText, Paperclip, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatBytes } from "@/lib/r2";
+import { formatBytes, isImageMimeType } from "@/lib/r2";
 
 /**
  * Choose one file for a form, without uploading it. The form uploads it on
@@ -18,7 +18,6 @@ export function FilePicker({
   accept,
   hint,
   validate,
-  preview = false,
   disabled = false,
   buttonLabel = "Choose file",
 }: {
@@ -27,17 +26,16 @@ export function FilePicker({
   accept: string;
   hint?: string;
   validate: (file: File) => { isValid: boolean; error?: string };
-  /** Show an image thumbnail of the chosen file. */
-  preview?: boolean;
   disabled?: boolean;
   buttonLabel?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const hintId = useId();
   const [error, setError] = useState<string | null>(null);
+  // Any image is previewed, so what was picked is visible before it uploads.
   const previewUrl = useMemo(
-    () => (preview && value ? URL.createObjectURL(value) : null),
-    [preview, value],
+    () => (value && isImageMimeType(value.type) ? URL.createObjectURL(value) : null),
+    [value],
   );
 
   // An object URL is a manual allocation; release each one when it is replaced.
@@ -78,7 +76,11 @@ export function FilePicker({
         <div className="flex items-center gap-2 rounded-md border p-2">
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt="" className="h-10 w-16 shrink-0 rounded object-cover" />
+            <img
+              src={previewUrl}
+              alt={`Preview of ${value.name}`}
+              className="h-10 w-16 shrink-0 rounded border object-cover"
+            />
           ) : (
             <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
           )}

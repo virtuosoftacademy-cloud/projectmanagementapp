@@ -1,7 +1,10 @@
 "use server";
 
 /**
- * Writes for boards, lists and card placement.
+ * Writes for boards and card placement.
+ *
+ * Lists are not written here at all: every board has the same four, one per
+ * status, kept in shape by `ensureBoardLists` in `lib/boards.ts`.
  *
  * Every action re-checks `tasks.manage` and proves the board, list or card
  * belongs to the caller's workspace before touching it — an id alone is never
@@ -14,8 +17,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createBoardWithLists, listForStatus, moveCard } from "@/lib/boards";
-import { TASK_STATUS_VALUES, type TaskStatus } from "@/lib/domain";
-import { taskStatusToDb } from "@/lib/mappers";
 import { requirePermission } from "@/lib/session";
 import { firstError } from "@/lib/validations";
 
@@ -25,11 +26,7 @@ const NOT_FOUND: ActionResult = { ok: false, error: "That no longer exists." };
 
 /** A project may hold this many boards; beyond it the tab strip stops being usable. */
 const MAX_BOARDS = 20;
-/** And a board this many lists — a horizontal scroll past that is unworkable. */
-const MAX_LISTS = 20;
-
 const name = z.string().trim().min(1, "Give it a name.").max(60);
-const status = z.enum(TASK_STATUS_VALUES as [string, ...string[]]);
 
 function refresh(projectId: string) {
   revalidatePath(`/projects/project/${projectId}`, "layout");
@@ -134,137 +131,6 @@ export async function deleteBoardAction(boardId: string): Promise<ActionResult> 
   return { ok: true, id: target.id };
 }
 
-// --- Lists -----------------------------------------------------------------
-
-export async function createListAction(input: unknown): Promise<ActionResult> {
-  const user = await requirePermission("tasks.manage");
-  const parsed = z.object({ boardId: z.string().min(1), name, status }).safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-
-  const board = await findBoard(parsed.data.boardId, user.workspaceId);
-  if (!board) return NOT_FOUND;
-
-  const count = await prisma.boardList.count({ where: { boardId: board.id } });
-  if (count >= MAX_LISTS) return { ok: false, error: `A board can hold ${MAX_LISTS} lists.` };
-
-  const list = await prisma.boardList.create({
-    data: {
-      boardId: board.id,
-      name: parsed.data.name,
-      status: taskStatusToDb[parsed.data.status as TaskStatus],
-      position: count,
-    },
-    select: { id: true },
-  });
-
-  refresh(board.projectId);
-  return { ok: true, id: list.id };
-}
-
-/**
- * Rename a list, or change which status it counts as.
- *
- * Changing the status re-labels every card on it in the same transaction —
- * otherwise cards would sit on a "Done" list while still counting as in
- * progress, which is precisely the drift the mapping exists to prevent.
- */
-export async function updateListAction(input: unknown): Promise<ActionResult> {
-  const user = await requirePermission("tasks.manage");
-  const parsed = z.object({ listId: z.string().min(1), name, status }).safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-
-  const list = await findList(parsed.data.listId, user.workspaceId);
-  if (!list) return NOT_FOUND;
-
-  const dbStatus = taskStatusToDb[parsed.data.status as TaskStatus];
-  await prisma.$transaction([
-    prisma.boardList.update({
-      where: { id: list.id },
-      data: { name: parsed.data.name, status: dbStatus },
-    }),
-    prisma.task.updateMany({ where: { listId: list.id }, data: { status: dbStatus } }),
-  ]);
-
-  refresh(list.board.projectId);
-  return { ok: true };
-}
-
-/** Move a list one place left or right. */
-export async function moveListAction(input: unknown): Promise<ActionResult> {
-  const user = await requirePermission("tasks.manage");
-  const parsed = z
-    .object({ listId: z.string().min(1), direction: z.union([z.literal(-1), z.literal(1)]) })
-    .safeParse(input);
-  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
-
-  const list = await findList(parsed.data.listId, user.workspaceId);
-  if (!list) return NOT_FOUND;
-
-  const lists = await prisma.boardList.findMany({
-    where: { boardId: list.boardId },
-    orderBy: { position: "asc" },
-    select: { id: true },
-  });
-  const from = lists.findIndex((item) => item.id === list.id);
-  const to = from + parsed.data.direction;
-  if (to < 0 || to >= lists.length) return { ok: true };
-
-  const reordered = [...lists];
-  [reordered[from], reordered[to]] = [reordered[to], reordered[from]];
-
-  await prisma.$transaction(
-    reordered.map((item, position) =>
-      prisma.boardList.update({ where: { id: item.id }, data: { position } }),
-    ),
-  );
-
-  refresh(list.board.projectId);
-  return { ok: true };
-}
-
-/**
- * Delete an empty list.
- *
- * Refused while it holds cards, with the count, rather than guessing where
- * they should go — the same rule as deleting a workspace or a team. Archived
- * cards do not block it: they leave the list and are re-homed by status the
- * next time the board loads, so none is lost.
- */
-export async function deleteListAction(listId: string): Promise<ActionResult> {
-  const user = await requirePermission("tasks.manage");
-
-  const list = await findList(listId, user.workspaceId);
-  if (!list) return NOT_FOUND;
-
-  const cards = await prisma.task.count({ where: { listId: list.id, archivedAt: null } });
-  if (cards) {
-    return {
-      ok: false,
-      error: `Move its ${cards} card${cards === 1 ? "" : "s"} to another list first.`,
-    };
-  }
-
-  const remaining = await prisma.boardList.count({ where: { boardId: list.boardId } });
-  if (remaining <= 1) return { ok: false, error: "A board needs at least one list." };
-
-  await prisma.boardList.delete({ where: { id: list.id } });
-
-  // Close the gap so positions stay a dense run.
-  const lists = await prisma.boardList.findMany({
-    where: { boardId: list.boardId },
-    orderBy: { position: "asc" },
-    select: { id: true, position: true },
-  });
-  await prisma.$transaction(
-    lists
-      .map((item, position) => ({ ...item, next: position }))
-      .filter((item) => item.position !== item.next)
-      .map((item) => prisma.boardList.update({ where: { id: item.id }, data: { position: item.next } })),
-  );
-
-  refresh(list.board.projectId);
-  return { ok: true };
-}
 
 // --- Cards -----------------------------------------------------------------
 

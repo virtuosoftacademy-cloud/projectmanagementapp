@@ -6,8 +6,10 @@ import {
   AlignLeft,
   CheckSquare,
   Clock,
+  CornerDownRight,
   ListTree,
   MoreHorizontal,
+  MoveRight,
   Paperclip,
   Pencil,
   Trash2,
@@ -47,8 +49,11 @@ export function BoardCard({
   onDragStart,
   onDragEnd,
   onMoveRequest,
+  onEditRequest,
+  onDeleteRequest,
+  onAddCardSubtaskRequest,
   onSubtasksRequest,
-  onAddSubtaskRequest,
+  onOpenSubtaskRequest,
   onEditSubtaskRequest,
   onDeleteSubtaskRequest,
 }: {
@@ -67,10 +72,14 @@ export function BoardCard({
   onDragEnd: () => void;
   /** Opens the keyboard- and touch-friendly move dialog. */
   onMoveRequest: () => void;
+  onEditRequest: () => void;
+  onDeleteRequest: () => void;
+  /** Adds a subtask to the card itself, not under an existing one. */
+  onAddCardSubtaskRequest: () => void;
   /** Opens the card's subtasks. */
   onSubtasksRequest: () => void;
-  /** Opens the dialog to add a subtask beneath the one clicked. */
-  onAddSubtaskRequest: (parent: { id: string; title: string }) => void;
+  /** Opens the clicked subtask's own dialog. */
+  onOpenSubtaskRequest: (subtask: Subtask) => void;
   onEditSubtaskRequest: (subtask: Subtask) => void;
   onDeleteSubtaskRequest: (subtask: Subtask) => void;
 }) {
@@ -141,15 +150,37 @@ export function BoardCard({
           <ListTree className="h-3.5 w-3.5" />
         </Button>
         {canManage ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Move ${task.title}`}
-            onClick={onMoveRequest}
-            className="-mr-1 -mt-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-          >
-            <MoreHorizontal className="h-3.5 w-3.5" />
-          </Button>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                draggable={false}
+                aria-label={`Actions for ${task.title}`}
+                className="-mr-1 -mt-1 h-6 w-6 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-36">
+              <DropdownMenuItem onSelect={onEditRequest}>
+                <Pencil className="h-3.5 w-3.5" />
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onAddCardSubtaskRequest}>
+                <CornerDownRight className="h-3.5 w-3.5" />
+                Add subtask
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onMoveRequest}>
+                <MoveRight className="h-3.5 w-3.5" />
+                Move
+              </DropdownMenuItem>
+              <DropdownMenuItem variant="destructive" onSelect={onDeleteRequest}>
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </div>
 
@@ -168,31 +199,19 @@ export function BoardCard({
                   className="h-3 w-3 shrink-0"
                   style={{ color: taskStatusColor[node.status] }}
                 />
-                {canManage ? (
-                  <button
-                    type="button"
-                    draggable={false}
-                    onClick={() => onAddSubtaskRequest({ id: node.id, title: node.title })}
-                    aria-label={`Add a subtask under ${node.title}`}
-                    title={`Add a subtask under ${node.title}`}
-                    className={cn(
-                      "min-w-0 truncate rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      node.status === "done" && "text-muted-foreground line-through",
-                    )}
-                  >
-                    {node.title}
-                  </button>
-                ) : (
-                  <span
-                    className={cn(
-                      "min-w-0 truncate",
-                      node.status === "done" && "text-muted-foreground line-through",
-                    )}
-                    title={node.title}
-                  >
-                    {node.title}
-                  </span>
-                )}
+                <button
+                  type="button"
+                  draggable={false}
+                  onClick={() => onOpenSubtaskRequest(node)}
+                  aria-label={`Open ${node.title}`}
+                  title={node.title}
+                  className={cn(
+                    "min-w-0 truncate rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    node.status === "done" && "text-muted-foreground line-through",
+                  )}
+                >
+                  {node.title}
+                </button>
                 {canManage ? (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>

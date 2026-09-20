@@ -6,47 +6,141 @@ import { Field } from "@/components/ui/field";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
+import Image from "next/image";
+import Link from "next/link";
+import { ExternalLink, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { AvatarStack } from "@/components/avatar-stack";
 import { TaskSubtasks } from "@/components/projects/task-subtasks";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { isOptimizableImageSrc } from "@/lib/r2";
+import { priorityVariant } from "@/lib/status";
 import {
   TASK_STATUSES,
+  formatDay,
   type BoardList,
   type RunningTimer,
   type Subtask,
-  type TaskStatus,
+  type Task,
 } from "@/lib/domain";
-
-const STATUS_OPTIONS = TASK_STATUSES.map(({ status, label }) => ({ value: status, label }));
 
 /** A card's subtasks — the same mind map as on the task page. */
 export function SubtasksDialog({
   open,
-  taskId,
-  taskTitle,
+  task,
   subtasks,
   running,
   canManage,
   canLog,
   onClose,
+  onEdit,
+  onDelete,
 }: {
   open: boolean;
-  taskId: string;
-  taskTitle: string;
+  task: Task;
   subtasks: Subtask[];
   running: RunningTimer | null;
   canManage: boolean;
   canLog: boolean;
   onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
 }) {
+  const status = TASK_STATUSES.find((item) => item.status === task.status)?.label;
+
   return (
-    <FormDialog open={open} onClose={onClose} title={taskTitle} className="sm:max-w-4xl">
-      <TaskSubtasks
-        taskId={taskId}
-        taskTitle={taskTitle}
-        subtasks={subtasks}
-        running={running}
-        canManage={canManage}
-        canLog={canLog}
-      />
+    <FormDialog open={open} onClose={onClose} title={task.title} className="sm:max-w-4xl">
+      <div className="space-y-4">
+        {task.coverUrl ? (
+          <div className="relative h-32 overflow-hidden rounded-md border bg-muted sm:h-40">
+            <Image
+              src={task.coverUrl}
+              alt=""
+              fill
+              sizes="(min-width: 640px) 56rem, 100vw"
+              className="object-cover"
+              unoptimized={!isOptimizableImageSrc(task.coverUrl)}
+            />
+          </div>
+        ) : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={priorityVariant[task.priority]} className="capitalize">
+              {task.priority}
+            </Badge>
+            <Badge variant="outline">{status}</Badge>
+            {task.dueDate ? (
+              <Badge variant="outline" className="font-mono">
+                Due {formatDay(task.dueDate)}
+              </Badge>
+            ) : null}
+            {task.labels.map((label) => (
+              <Badge
+                key={label.id}
+                variant="outline"
+                className="gap-1.5"
+                style={{ borderColor: label.color }}
+              >
+                <span
+                  aria-hidden
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: label.color }}
+                />
+                {label.name}
+              </Badge>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {task.assignees.length ? <AvatarStack people={task.assignees} max={4} /> : null}
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/projects/project/${task.projectId}/tasks/${task.id}`}>
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open
+              </Link>
+            </Button>
+            {canManage ? (
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label={`Actions for ${task.title}`}>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-36">
+                  <DropdownMenuItem onSelect={onEdit}>
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
+          </div>
+        </div>
+
+        {task.description ? (
+          <p className="whitespace-pre-wrap text-sm text-muted-foreground">{task.description}</p>
+        ) : null}
+
+        <TaskSubtasks
+          taskId={task.id}
+          taskTitle={task.title}
+          subtasks={subtasks}
+          running={running}
+          canManage={canManage}
+          canLog={canLog}
+        />
+      </div>
     </FormDialog>
   );
 }
@@ -104,86 +198,6 @@ export function BoardNameDialog({
   );
 }
 
-/**
- * Create a list, or rename one and change what it counts as.
- *
- * The status field is what makes a free-form list safe: "QA" can be anything
- * the team likes, as long as it says whether its cards are in review or done.
- * Changing it on an existing list re-labels every card on it, which the hint
- * spells out — it moves those cards in every report.
- */
-export function ListDialog({
-  open,
-  title,
-  initial,
-  cardCount,
-  submitLabel,
-  pending,
-  error,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  title: string;
-  initial: { name: string; status: TaskStatus };
-  /** How many cards a status change would affect; omitted for a new list. */
-  cardCount?: number;
-  submitLabel: string;
-  pending: boolean;
-  error: string | null;
-  onClose: () => void;
-  onSubmit: (value: { name: string; status: TaskStatus }) => void;
-}) {
-  const [name, setName] = useState(initial.name);
-  const [status, setStatus] = useState<TaskStatus>(initial.status);
-  const changingStatus = cardCount !== undefined && status !== initial.status && cardCount > 0;
-
-  return (
-    <FormDialog open={open} onClose={onClose} title={title}>
-      <form
-        className="grid gap-4 py-2"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit({ name, status });
-        }}
-      >
-        <Field label="Name" required>
-          <Input
-            required
-            autoFocus
-            maxLength={60}
-            value={name}
-            placeholder="e.g. Backlog, QA, Waiting on client"
-            onChange={(event) => setName(event.target.value)}
-          />
-        </Field>
-        <Field
-          label="Counts as"
-          hint="Cards on this list take this status, which is what progress and reports use."
-        >
-          <SelectField
-            value={status}
-            onValueChange={(value) => setStatus(value as TaskStatus)}
-            options={STATUS_OPTIONS}
-          />
-        </Field>
-        {changingStatus ? (
-          <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-xs">
-            The {cardCount} card{cardCount === 1 ? "" : "s"} on this list will change status too.
-          </p>
-        ) : null}
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <DialogActions onCancel={onClose} submitLabel={submitLabel} disabled={pending} />
-        </div>
-      </form>
-    </FormDialog>
-  );
-}
 
 /**
  * Move a card without dragging it.
