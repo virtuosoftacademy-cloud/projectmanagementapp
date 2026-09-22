@@ -189,7 +189,7 @@ export async function addCardAction(input: unknown): Promise<ActionResult> {
     select: {
       id: true,
       status: true,
-      board: { select: { projectId: true, project: { select: { defaultBillable: true } } } },
+      board: { select: { projectId: true } },
     },
   });
   if (!list) return NOT_FOUND;
@@ -203,7 +203,6 @@ export async function addCardAction(input: unknown): Promise<ActionResult> {
       status: list.status,
       listId: list.id,
       position: (last._max.position ?? -1) + 1,
-      billable: list.board.project.defaultBillable,
     },
     select: { id: true },
   });

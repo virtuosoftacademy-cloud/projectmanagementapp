@@ -35,7 +35,6 @@ export type TaskDraft = {
   priority: Priority;
   assigneeIds: string[];
   estimateHours: number;
-  billable: boolean;
   dueDate: string;
   /** Uploaded after the task exists; never sent with the draft itself. */
   cover: File | null;
@@ -73,7 +72,6 @@ export function TaskDialog({
     priority: "medium" as Priority,
     estimateHours: 1,
     dueDate: "",
-    billable: true,
   });
 
   const set = <K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) =>
@@ -98,7 +96,6 @@ export function TaskDialog({
             priority: draft.priority,
             assigneeIds: draft.assigneeId ? [draft.assigneeId] : [],
             estimateHours: Number(draft.estimateHours) || 0,
-            billable: draft.billable,
             dueDate: draft.dueDate,
             cover: draft.cover,
             file: draft.file,
@@ -202,16 +199,6 @@ export function TaskDialog({
             hint={`${ATTACHMENT_LABEL}. Up to ${formatBytes(MAX_SIZE)}.`}
           />
         </Field>
-
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={draft.billable}
-            onChange={(event) => set("billable", event.target.checked)}
-            className="h-4 w-4 accent-[hsl(var(--primary))]"
-          />
-          Billable
-        </label>
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <DialogActions onCancel={onClose} submitLabel="Create" disabled={pending} />

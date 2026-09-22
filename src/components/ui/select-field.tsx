@@ -46,7 +46,7 @@ export function SelectField({
       name={name}
       disabled={disabled}
     >
-      <SelectTrigger className={cn("w-full", className)} aria-label={ariaLabel}>
+      <SelectTrigger className={cn("w-full mt-4", className)} aria-label={ariaLabel}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

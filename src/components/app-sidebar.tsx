@@ -1,12 +1,3 @@
-/**
- * Sidebar Navigation
- * Role-based navigation sidebar for the workspace.
- *
- * Structure follows the PropertyPro sidebar: role-filtered `NavSection[]` of
- * `NavItem[]`, collapsible parents with tree connectors, count badges, an
- * in-sidebar collapse toggle and a user footer. Colours use this app's design
- * tokens rather than hard-coded greys, so it still themes light and dark.
- */
 
 "use client";
 
@@ -179,7 +170,7 @@ export function AppSidebar({
     // A project row trades the expand chevron for a "＋" that opens its feature
     // picker. The button has to sit outside the Link — nesting it would be
     // invalid HTML and its click would also toggle the expand.
-    // The "＋" opens the feature picker, which is owner/admin only — so a
+    // The "＋" opens the feature picker, which is admin only — so a
     // member sees the ordinary expand chevron instead of a control that would
     // be refused on submit.
     const isProjectRow = Boolean(item.projectId) && !collapsed && canManageFeatures;
@@ -361,7 +352,7 @@ export function AppSidebar({
               </DropdownMenuItem>
             ))}
             {/*
-              `workspace.create` is owner/admin only, and the action enforces
+              `workspace.create` is admin only, and the action enforces
               it regardless — hiding the entry keeps the menu honest rather
               than offering something that fails on submit.
             */}
@@ -395,7 +386,7 @@ export function AppSidebar({
           open={creatingWorkspace}
           onClose={() => setCreatingWorkspace(false)}
           title="New workspace"
-          description="You'll be its owner — invite others once it's created."
+          description="You'll be its admin — invite others once it's created."
         >
           <form
             className="grid gap-4 py-2"

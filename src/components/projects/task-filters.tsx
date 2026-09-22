@@ -2,6 +2,7 @@
 
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import { PRIORITIES, type Label, type Member, type Task } from "@/lib/domain";
@@ -96,10 +97,10 @@ export function TaskFilters({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
+      <div className="relative min-w-[12rem] flex-1 sm:max-w-xs -mt-3">
         <Search
           aria-hidden
-          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 text-muted-foreground"
         />
         <Input
           type="search"
@@ -148,11 +149,9 @@ export function TaskFilters({
 
       {allowArchived ? (
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
+          <Checkbox
             checked={filter.includeArchived}
-            onChange={(event) => set("includeArchived", event.target.checked)}
-            className="h-4 w-4 accent-[hsl(var(--primary))]"
+            onCheckedChange={(checked) => set("includeArchived", checked === true)}
           />
           Show archived
         </label>

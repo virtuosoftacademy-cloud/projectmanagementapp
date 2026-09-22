@@ -5,9 +5,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DialogActions } from "@/components/ui/form-actions";
 import { Field } from "@/components/ui/field";
 import { FormDialog } from "@/components/ui/form-dialog";
+import { FilePicker } from "@/components/ui/file-picker";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  ACCEPT_ATTRIBUTE,
+  ALLOWED_LABEL,
+  ATTACHMENT_ACCEPT,
+  ATTACHMENT_LABEL,
+  MAX_SIZE,
+  formatBytes,
+  validateAttachmentFile,
+  validateImageFile,
+} from "@/lib/r2";
 import {
   PRIORITIES,
   TASK_STATUSES,
@@ -18,8 +29,8 @@ import {
   type TaskStatus,
 } from "@/lib/domain";
 
-export type TaskEdit = {
-  taskId: string;
+/** What the form holds. A new card and an edited one differ only in the id. */
+export type TaskFormValues = {
   title: string;
   description: string;
   status: TaskStatus;
@@ -27,9 +38,13 @@ export type TaskEdit = {
   assigneeIds: string[];
   labelIds: string[];
   estimateHours: number;
-  billable: boolean;
   dueDate: string;
+  /** Only offered when creating; uploaded once the card exists. */
+  cover: File | null;
+  file: File | null;
 };
+
+export type TaskEdit = TaskFormValues & { taskId: string };
 
 /** Adds or removes one id, so the checkbox lists stay set-like. */
 function toggle(list: string[], id: string) {
@@ -37,18 +52,19 @@ function toggle(list: string[], id: string) {
 }
 
 /**
- * Edit an existing task.
+ * One task's details, whether it exists yet or not.
  *
- * Separate from `TaskDialog` (which creates) rather than one dialog doing both:
- * creating asks which project, editing does not — a task cannot move between
- * projects once it has time logged against it — and editing offers description,
- * labels and several assignees, none of which the quick create needs.
+ * A board card is added with the same form it is later edited with, so the
+ * fields never disagree between the two. `task` absent means a new card: the
+ * form starts empty at `defaultStatus`, and offers a cover and a file, which
+ * only make sense once there is something to attach them to.
  */
 export function TaskEditDialog({
   open,
   onClose,
   onSubmit,
   task,
+  defaultStatus = "todo",
   members,
   labels,
   pending,
@@ -56,23 +72,26 @@ export function TaskEditDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (edit: TaskEdit) => void;
-  task: Task;
+  onSubmit: (values: TaskFormValues) => void;
+  /** The task being edited, or nothing when adding one. */
+  task?: Task;
+  defaultStatus?: TaskStatus;
   members: Member[];
   labels: Label[];
   pending?: boolean;
   error?: string | null;
 }) {
   const [draft, setDraft] = useState({
-    title: task.title,
-    description: task.description,
-    status: task.status,
-    priority: task.priority,
-    assigneeIds: task.assignees.map((person) => person.id),
-    labelIds: task.labels.map((label) => label.id),
-    estimateHours: task.estimateHours,
-    dueDate: task.dueDate ?? "",
-    billable: task.billable,
+    title: task?.title ?? "",
+    description: task?.description ?? "",
+    status: task?.status ?? defaultStatus,
+    priority: task?.priority ?? ("medium" as Priority),
+    assigneeIds: task?.assignees.map((person) => person.id) ?? [],
+    labelIds: task?.labels.map((label) => label.id) ?? [],
+    estimateHours: task?.estimateHours ?? 1,
+    dueDate: task?.dueDate ?? "",
+    cover: null as File | null,
+    file: null as File | null,
   });
 
   const set = <K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) =>
@@ -82,15 +101,14 @@ export function TaskEditDialog({
     <FormDialog
       open={open}
       onClose={onClose}
-      title="Edit task"
-      description="Change the details of this task."
+      title={task ? "Edit task" : "Add a card"}
+      description={task ? "Change the details of this task." : "Create a card on this list."}
     >
       <form
         className="grid gap-4 py-2"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit({
-            taskId: task.id,
             title: draft.title,
             description: draft.description,
             status: draft.status,
@@ -98,8 +116,9 @@ export function TaskEditDialog({
             assigneeIds: draft.assigneeIds,
             labelIds: draft.labelIds,
             estimateHours: Number(draft.estimateHours) || 0,
-            billable: draft.billable,
             dueDate: draft.dueDate,
+            cover: draft.cover,
+            file: draft.file,
           });
         }}
       >
@@ -202,15 +221,31 @@ export function TaskEditDialog({
           )}
         </fieldset>
 
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={draft.billable}
-            onChange={(event) => set("billable", event.target.checked)}
-            className="h-4 w-4 accent-[hsl(var(--primary))]"
-          />
-          Billable
-        </label>
+        {task ? null : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Cover image">
+              <FilePicker
+                value={draft.cover}
+                onChange={(file) => set("cover", file)}
+                accept={ACCEPT_ATTRIBUTE}
+                validate={validateImageFile}
+                disabled={pending}
+                buttonLabel="Choose image"
+                hint={`${ALLOWED_LABEL}, up to ${formatBytes(MAX_SIZE)}.`}
+              />
+            </Field>
+            <Field label="File">
+              <FilePicker
+                value={draft.file}
+                onChange={(file) => set("file", file)}
+                accept={ATTACHMENT_ACCEPT}
+                validate={validateAttachmentFile}
+                disabled={pending}
+                hint={`${ATTACHMENT_LABEL}. Up to ${formatBytes(MAX_SIZE)}.`}
+              />
+            </Field>
+          </div>
+        )}
 
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -221,7 +256,9 @@ export function TaskEditDialog({
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <DialogActions
             onCancel={onClose}
-            submitLabel={pending ? "Saving…" : "Save changes"}
+            submitLabel={
+              pending ? "Saving…" : task ? "Save changes" : "Add card"
+            }
             disabled={pending}
           />
         </div>

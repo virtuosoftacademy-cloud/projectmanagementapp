@@ -7,7 +7,10 @@ import { ArchiveRestore, ArchiveX, ChartNoAxesColumn, ChevronLeft, CircleAlert, 
 import { AvatarStack } from "@/components/avatar-stack";
 import { TaskAttachments } from "@/components/projects/task-attachments";
 import { TaskCover } from "@/components/projects/task-cover";
-import { TaskEditDialog, type TaskEdit } from "@/components/projects/task-edit-dialog";
+import {
+  TaskEditDialog,
+  type TaskFormValues,
+} from "@/components/projects/task-edit-dialog";
 import { TaskSubtasks } from "@/components/projects/task-subtasks";
 import { TaskTimeTracking } from "@/components/projects/task-time-tracking";
 import { Badge } from "@/components/ui/badge";
@@ -97,8 +100,8 @@ export function TaskDetail({
     });
   }
 
-  function save(edit: TaskEdit) {
-    run(() => updateTaskAction(edit), () => setEditing(false));
+  function save(values: TaskFormValues) {
+    run(() => updateTaskAction({ ...values, taskId: task.id }), () => setEditing(false));
   }
 
   return (
@@ -121,11 +124,6 @@ export function TaskDetail({
             <Badge variant={priorityVariant[task.priority]} className="capitalize">
               {task.priority}
             </Badge>
-            {task.billable ? (
-              <Badge variant="secondary" className="text-[10px]">
-                billable
-              </Badge>
-            ) : null}
             {task.archived ? <Badge variant="outline">Archived</Badge> : null}
             {task.labels.map((label) => (
               <Badge
@@ -257,6 +255,7 @@ export function TaskDetail({
         taskId={task.id}
         taskTitle={task.title}
         subtasks={subtasks}
+        members={task.assignees}
         running={running}
         canManage={canManage}
         canLog={canLog}

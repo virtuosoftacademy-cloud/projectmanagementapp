@@ -30,6 +30,8 @@ export default async function ProjectsPage() {
       members={members}
       teams={teams}
       canCreate={can(viewer.role, "projects.create")}
+      canEdit={can(viewer.role, "projects.edit")}
+      canDelete={can(viewer.role, "projects.delete")}
       stats={
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <KpiCard

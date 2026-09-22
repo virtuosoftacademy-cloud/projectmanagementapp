@@ -31,7 +31,6 @@ function invert<A extends string, B extends string>(map: Record<A, B>): Record<B
 }
 
 export const roleToDomain: Record<DbRole, Role> = {
-  OWNER: "owner",
   ADMIN: "admin",
   MANAGER: "manager",
   MEMBER: "member",

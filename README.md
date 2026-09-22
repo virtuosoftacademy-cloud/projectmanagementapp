@@ -25,7 +25,7 @@ npm run db:migrate
 ```
 
 ```bash
-npm run db:seed
+npm run db:roles
 ```
 
 Then start the app:
@@ -48,7 +48,7 @@ permission matrix at work.
 | `npm run build` | Production build |
 | `npm run db:migrate` | Create/apply a migration (dev) |
 | `npm run db:deploy` | Apply pending migrations (production) |
-| `npm run db:seed` | Upsert the six demo accounts |
+| `npm run db:roles` | Seed the editable roles into every workspace |
 | `npm run db:studio` | Browse the database |
 
 ## Authorization
@@ -129,6 +129,10 @@ entries, campaigns, landing sections, messages and activity.
   enums and the app's lowercase vocabulary (`IN_PROGRESS` ⇄ `"in-progress"`), so no
   storage-shaped value ever reaches a component.
 
-Seed content lives in [`prisma/seed-data.ts`](prisma/seed-data.ts), keyed by natural
-identifiers (email, project key, task key) rather than ids, which is what makes
-`npm run db:seed` idempotent.
+The roles a workspace starts with live in
+[`src/lib/default-roles.ts`](src/lib/default-roles.ts), which is what both workspace
+creation and [`prisma/seed.ts`](prisma/seed.ts) call — so a seeded workspace and a
+newly created one can never disagree. Seeding is additive: a role
+already present is left as it is, which is what makes `npm run db:roles` idempotent.
+There is no demo data: a seed that invents accounts is a liability the moment it runs
+somewhere real, and the build runs this on deploy.

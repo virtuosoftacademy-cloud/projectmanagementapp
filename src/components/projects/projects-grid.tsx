@@ -3,10 +3,29 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarDays, Circle, Plus, SquareCheckBig } from "lucide-react";
+import {
+  CalendarDays,
+  Circle,
+  FolderPlus,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Search,
+  SquareCheckBig,
+  Trash2,
+} from "lucide-react";
 import { AvatarStack } from "@/components/avatar-stack";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { DialogActions } from "@/components/ui/form-actions";
@@ -14,7 +33,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Field } from "@/components/ui/field";
 import { SelectField } from "@/components/ui/select-field";
-import { createProjectAction } from "@/lib/actions";
+import {
+  createProjectAction,
+  deleteProjectAction,
+  updateProjectAction,
+} from "@/lib/actions";
 import {
   COLOR_SWATCHES,
   PROJECT_STATUSES,
@@ -34,19 +57,56 @@ export function ProjectsGrid({
   members,
   teams,
   canCreate,
+  canEdit,
+  canDelete,
   stats,
 }: {
   projects: ProjectCard[];
   members: Member[];
   teams: Team[];
   canCreate: boolean;
+  /** `projects.edit` — the ⋯ menu's Edit. */
+  canEdit: boolean;
+  /** `projects.delete` — its Delete. */
+  canDelete: boolean;
   /** Summary cards rendered between the header and the project grid. */
   stats: React.ReactNode;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<ProjectCard | null>(null);
+  const [removing, setRemoving] = useState<ProjectCard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [teamId, setTeamId] = useState("all");
+
+  const visible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return projects.filter((project) => {
+      if (status !== "all" && project.status !== status) return false;
+      if (teamId !== "all" && (project.teamId ?? "") !== (teamId === "none" ? "" : teamId)) {
+        return false;
+      }
+      if (!term) return true;
+      return (
+        project.name.toLowerCase().includes(term) ||
+        project.description.toLowerCase().includes(term)
+      );
+    });
+  }, [projects, search, status, teamId]);
+
+  function run(action: () => Promise<{ ok: boolean; error?: string }>, onDone: () => void) {
+    startTransition(async () => {
+      const result = await action();
+      setError(result.error ?? null);
+      if (result.ok) {
+        onDone();
+        router.refresh();
+      }
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -71,8 +131,58 @@ export function ProjectsGrid({
 
       {stats}
 
+      {projects.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-52 flex-1 ">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 text-muted-foreground"
+            />
+            <Input
+              value={search}
+              aria-label="Search projects"
+              placeholder="Search projects…"
+              className="h-9 pl-8"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+
+          <SelectField
+            value={status}
+            aria-label="Filter by status"
+            className="h-9 w-40"
+            onValueChange={setStatus}
+            options={[
+              { value: "all", label: "Any status" },
+              ...PROJECT_STATUSES.map((value) => ({
+                value,
+                label: value.replace("-", " "),
+              })),
+            ]}
+          />
+
+          <SelectField
+            value={teamId}
+            aria-label="Filter by team"
+            className="h-9 w-44"
+            onValueChange={setTeamId}
+            options={[
+              { value: "all", label: "Any team" },
+              ...teams.map((team) => ({ value: team.id, label: team.name })),
+              { value: "none", label: "No team" },
+            ]}
+          />
+
+          {/* <span className="text-xs text-muted-foreground">
+            {visible.length === projects.length
+              ? `${projects.length} project${projects.length === 1 ? "" : "s"}`
+              : `${visible.length} of ${projects.length}`}
+          </span> */}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {projects.map((project) => (
+        {visible.map((project) => (
           <Card key={project.id} className="transition-shadow hover:shadow-md">
             <CardContent className="space-y-4 p-5">
               <div className="flex items-start justify-between gap-2">
@@ -88,10 +198,52 @@ export function ProjectsGrid({
                     {project.name}
                   </Link>
                 </div>
-                <Badge variant={statusVariant[project.status]}>{project.status}</Badge>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Badge variant={statusVariant[project.status]}>{project.status}</Badge>
+                  {canEdit || canDelete ? (
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          disabled={pending}
+                          aria-label={`Actions for ${project.name}`}
+                        >
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-36">
+                        {canEdit ? (
+                          <DropdownMenuItem onSelect={() => setEditing(project)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </DropdownMenuItem>
+                        ) : null}
+                        {canDelete ? (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onSelect={() => setRemoving(project)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </DropdownMenuItem>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  ) : null}
+                </div>
               </div>
 
-              <p className="line-clamp-2 text-sm text-muted-foreground">{project.description}</p>
+              <p className="line-clamp-2 text-sm text-muted-foreground">
+                {project.description || "No description."}
+              </p>
+
+              <Progress
+                value={project.taskCount ? Math.round((project.done / project.taskCount) * 100) : 0}
+                aria-label={`${project.name} task progress`}
+                className="h-1.5"
+              />
 
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
@@ -115,6 +267,26 @@ export function ProjectsGrid({
         ))}
       </div>
 
+      {projects.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-10 text-center">
+          <FolderPlus aria-hidden className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-3 text-sm font-medium">No projects yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A project holds the boards, tasks and time behind a piece of work.
+          </p>
+          {canCreate ? (
+            <Button className="mt-4" onClick={() => setCreating(true)} disabled={pending}>
+              <Plus className="h-4 w-4" />
+              New Project
+            </Button>
+          ) : null}
+        </div>
+      ) : visible.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+          No project matches those filters.
+        </p>
+      ) : null}
+
       <ProjectDialog
         key={String(creating)}
         open={creating}
@@ -122,16 +294,40 @@ export function ProjectsGrid({
         onClose={() => setCreating(false)}
         members={members}
         teams={teams}
-        onSubmit={(draft) => {
-          startTransition(async () => {
-            const result = await createProjectAction(draft);
-            setError(result.error ?? null);
-            if (result.ok) {
-              setCreating(false);
-              router.refresh();
-            }
-          });
+        onSubmit={(draft) => run(() => createProjectAction(draft), () => setCreating(false))}
+      />
+
+      {editing ? (
+        <ProjectDialog
+          key={editing.id}
+          open
+          project={editing}
+          pending={pending}
+          onClose={() => setEditing(null)}
+          members={members}
+          teams={teams}
+          onSubmit={(draft) =>
+            run(() => updateProjectAction({ ...draft, id: editing.id }), () => setEditing(null))
+          }
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        onConfirm={() => {
+          const project = removing;
+          if (!project) return;
+          setRemoving(null);
+          run(() => deleteProjectAction(project.id), () => undefined);
         }}
+        confirmLabel="Delete"
+        title={`Delete ${removing?.name ?? "project"}?`}
+        description={
+          removing?.taskCount
+            ? `Its ${removing.taskCount} tasks go with it, along with their subtasks, files and logged time. This cannot be undone.`
+            : "Its boards, sheets and campaigns go with it. This cannot be undone."
+        }
       />
     </div>
   );
@@ -150,6 +346,7 @@ type ProjectDraft = {
 
 function ProjectDialog({
   open,
+  project,
   pending,
   onClose,
   onSubmit,
@@ -157,6 +354,8 @@ function ProjectDialog({
   teams,
 }: {
   open: boolean;
+  /** The project being edited, or nothing when creating one. */
+  project?: ProjectCard;
   pending: boolean;
   onClose: () => void;
   onSubmit: (draft: ProjectDraft) => void;
@@ -164,14 +363,14 @@ function ProjectDialog({
   teams: Team[];
 }) {
   const [draft, setDraft] = useState({
-    name: "",
-    description: "",
-    status: "planning" as ProjectStatus,
-    color: COLOR_SWATCHES[0],
-    teamId: "",
-    startDate: "",
-    endDate: "",
-    memberIds: [] as string[],
+    name: project?.name ?? "",
+    description: project?.description ?? "",
+    status: project?.status ?? ("planning" as ProjectStatus),
+    color: project?.color ?? COLOR_SWATCHES[0],
+    teamId: project?.teamId ?? "",
+    startDate: project?.startDate ?? "",
+    endDate: project?.endDate ?? "",
+    memberIds: project?.members.map((person) => person.id) ?? ([] as string[]),
   });
 
   const [showAllMembers, setShowAllMembers] = useState(false);
@@ -201,8 +400,12 @@ function ProjectDialog({
     <FormDialog
       open={open}
       onClose={onClose}
-      title="Create Project"
-      description="Add a new project to your workspace."
+      title={project ? "Edit project" : "Create Project"}
+      description={
+        project
+          ? "Change this project's details. Its colour and members are set on the project itself."
+          : "Add a new project to your workspace."
+      }
       className="max-w-xl"
     >
       <form
@@ -248,7 +451,7 @@ function ProjectDialog({
         </Field>
 
         <fieldset>
-          <legend className="mb-1.5 text-sm font-medium leading-none">Color</legend>
+          <legend className="mb-4 text-sm font-medium leading-none">Color</legend>
           <div className="flex items-center gap-2">
             {COLOR_SWATCHES.map((color) => (
               <button
@@ -287,17 +490,16 @@ function ProjectDialog({
         </div>
 
         <fieldset>
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="mb-4 flex items-center justify-between gap-2">
             <legend className="text-sm font-medium leading-none">
               Members ({draft.memberIds.length} selected)
             </legend>
             {draft.teamId ? (
               <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={showAllMembers}
-                  onChange={(event) => setShowAllMembers(event.target.checked)}
-                  className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+                  onCheckedChange={(checked) => setShowAllMembers(checked === true)}
+                  className="size-3.5"
                 />
                 Show everyone
               </label>
@@ -316,10 +518,9 @@ function ProjectDialog({
                   key={member.id}
                   className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 text-sm hover:bg-muted/50"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={draft.memberIds.includes(member.id)}
-                    onChange={() =>
+                    onCheckedChange={() =>
                       set(
                         "memberIds",
                         draft.memberIds.includes(member.id)
@@ -327,7 +528,6 @@ function ProjectDialog({
                           : [...draft.memberIds, member.id],
                       )
                     }
-                    className="h-4 w-4 accent-[hsl(var(--primary))]"
                   />
                   <span className="min-w-0 flex-1 truncate">{member.name}</span>
                   {/* Only worth labelling when the list is not already one team. */}
@@ -345,7 +545,11 @@ function ProjectDialog({
         </fieldset>
 
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <DialogActions onCancel={onClose} submitLabel="Create Project" disabled={pending} />
+          <DialogActions
+            onCancel={onClose}
+            submitLabel={project ? "Save changes" : "Create Project"}
+            disabled={pending}
+          />
         </div>
       </form>
     </FormDialog>

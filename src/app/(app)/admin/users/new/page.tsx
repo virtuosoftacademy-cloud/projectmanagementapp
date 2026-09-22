@@ -3,15 +3,17 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { CreateUserForm } from "@/components/admin/create-user-form";
 import type { Role } from "@/lib/domain";
-import { PERMISSION_LABELS, permissionsFor } from "@/lib/permissions";
+import { PERMISSION_LABELS, ROLES, permissionsFor } from "@/lib/permissions";
 import { getTeams } from "@/lib/queries";
-import { requirePermission } from "@/lib/session";
+import { requirePage, requirePermission } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Add user" };
 
 export default async function NewUserPage({
   searchParams,
 }: PageProps<"/admin/users/new">) {
+  // Part of Users, so an admin who unassigns that page closes this too.
+  await requirePage("users");
   const viewer = await requirePermission("members.invite");
   const teams = await getTeams(viewer.workspaceId);
 
@@ -26,7 +28,7 @@ export default async function NewUserPage({
   // Summarise each role from the permission matrix, so the hint under the role
   // picker can never drift from what the role actually grants.
   const roleHints = Object.fromEntries(
-    (["owner", "admin", "manager", "member", "viewer", "guest"] as Role[]).map((role) => {
+    ROLES.map((role) => {
       const permissions = permissionsFor(role);
       return [
         role,
@@ -41,7 +43,7 @@ export default async function NewUserPage({
   ) as Record<Role, string>;
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="max-w-full space-y-6">
       <div>
         <Link
           href={backHref}

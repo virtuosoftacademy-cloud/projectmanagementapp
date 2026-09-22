@@ -10,6 +10,7 @@ import {
   round1,
   todayIso,
   type ActivityEntry,
+  type AppNotification,
   type Attachment,
   type Branding,
   type Campaign,
@@ -183,7 +184,6 @@ export const getProjects = cache(
     teamId: project.teamId,
     startDate: dateToIso(project.startDate),
     endDate: dateToIso(project.endDate),
-    defaultBillable: project.defaultBillable,
     // Null means the project predates the column, so it keeps the pages it
     // already showed rather than losing them all at once.
     features: Array.isArray(project.features)
@@ -258,7 +258,6 @@ const getAllTasks = cache(async (workspaceId: string): Promise<Task[]> => {
       color: link.label.color,
     })),
     estimateHours: minutesToHours(task.estimateMinutes),
-    billable: task.billable,
     dueDate: dateToIso(task.dueDate),
     subtasksTotal: subtaskStatsByTask.get(task.id)?.total ?? 0,
     subtasksDone: subtaskStatsByTask.get(task.id)?.done ?? 0,
@@ -307,7 +306,6 @@ export const getTimeEntries = cache(async (workspaceId: string): Promise<TimeEnt
     userId: entry.userId,
     taskId: entry.taskId,
     hours: minutesToHours(entry.minutes),
-    billable: entry.billable,
     note: entry.note,
     startedAt: entry.startedAt?.toISOString() ?? null,
     endedAt: entry.endedAt?.toISOString() ?? null,
@@ -350,7 +348,6 @@ export const getTaskEntries = cache(
       userId: entry.userId,
       taskId: entry.taskId,
       hours: minutesToHours(entry.minutes),
-      billable: entry.billable,
       note: entry.note,
       startedAt: entry.startedAt?.toISOString() ?? null,
       endedAt: entry.endedAt?.toISOString() ?? null,
@@ -402,6 +399,7 @@ async function loadSubtasks(
       where: { task: taskWhere },
       orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       include: {
+        assignee: { select: personSelect },
         attachments: {
           orderBy: { createdAt: "asc" },
           select: { id: true, filename: true, objectKey: true, mimeType: true, size: true },
@@ -424,6 +422,7 @@ async function loadSubtasks(
     parentId: row.parentId,
     title: row.title,
     description: row.description,
+    assignee: (row.assignee as Person | null) ?? null,
     status: taskStatusToDomain[row.status],
     estimateMinutes: row.estimateMinutes,
     position: row.position,
@@ -448,6 +447,44 @@ export const getTaskSubtasks = cache(
 export const getProjectSubtasks = cache(
   (workspaceId: string, projectId: string): Promise<Subtask[]> =>
     loadSubtasks(workspaceId, { projectId }),
+);
+
+/**
+ * The viewer's notifications in this workspace, newest first.
+ *
+ * Capped rather than paged: the bell is a glance, not an inbox, and a count of
+ * everything unread is carried separately so the badge stays honest past the
+ * cap.
+ */
+export const getNotifications = cache(
+  async (
+    workspaceId: string,
+    userId: string,
+  ): Promise<{ items: AppNotification[]; unread: number }> => {
+    const [rows, unread] = await Promise.all([
+      prisma.notification.findMany({
+        where: { workspaceId, userId },
+        orderBy: { createdAt: "desc" },
+        take: 15,
+        include: { actor: { select: personSelect } },
+      }),
+      prisma.notification.count({ where: { workspaceId, userId, readAt: null } }),
+    ]);
+
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        title: row.title,
+        body: row.body,
+        href: row.href,
+        actor: (row.actor as Person | null) ?? null,
+        createdAt: row.createdAt.toISOString(),
+        read: row.readAt !== null,
+      })),
+      unread,
+    };
+  },
 );
 
 /**
@@ -494,6 +531,7 @@ export const getRunningTimer = cache(
       projectId: timer.task.project.id,
       projectName: timer.task.project.name,
       startedAt: timer.startedAt.toISOString(),
+      pausedAt: timer.pausedAt?.toISOString() ?? null,
       note: timer.note,
       subtaskId: timer.subtaskId,
       subtaskTitle: timer.subtask?.title ?? null,
@@ -535,7 +573,6 @@ export type EntryDetail = TimeEntry & {
   member: Member;
   task: Task;
   project: Project;
-  cost: number;
   /** Estimate minus logged hours; negative means over estimate. */
   variance: number;
 };
@@ -561,7 +598,6 @@ export const getEntryDetails = cache(async (workspaceId: string): Promise<EntryD
         member,
         task,
         project,
-        cost: Math.round(entry.hours * member.hourlyRate),
         variance: task.estimateHours - entry.hours,
       },
     ];
@@ -569,20 +605,16 @@ export const getEntryDetails = cache(async (workspaceId: string): Promise<EntryD
 });
 
 export const getProjectStats = cache(async (workspaceId: string, projectId: string) => {
-  const [allTasks, entries, members] = await Promise.all([
+  const [allTasks, entries] = await Promise.all([
     getTasks(workspaceId),
     getTimeEntries(workspaceId),
-    getMembers(workspaceId),
   ]);
 
   const tasks = allTasks.filter((task) => task.projectId === projectId);
   const taskIds = new Set(tasks.map((task) => task.id));
   const projectEntries = entries.filter((entry) => taskIds.has(entry.taskId));
-  const rate = (userId: string) => members.find((m) => m.id === userId)?.hourlyRate ?? 0;
-
   const done = tasks.filter((task) => task.status === "done").length;
   const hours = projectEntries.reduce((sum, entry) => sum + entry.hours, 0);
-  const billableEntries = projectEntries.filter((entry) => entry.billable);
 
   return {
     tasks,
@@ -595,13 +627,7 @@ export const getProjectStats = cache(async (workspaceId: string, projectId: stri
     }),
     progress: percent(done, tasks.length),
     hours: round1(hours),
-    billableHours: round1(billableEntries.reduce((sum, entry) => sum + entry.hours, 0)),
     estimateHours: round1(tasks.reduce((sum, task) => sum + task.estimateHours, 0)),
-    cost: projectEntries.reduce((sum, entry) => sum + Math.round(entry.hours * rate(entry.userId)), 0),
-    billableCost: billableEntries.reduce(
-      (sum, entry) => sum + Math.round(entry.hours * rate(entry.userId)),
-      0,
-    ),
     entries: projectEntries,
   };
 });
@@ -618,12 +644,10 @@ export const getMemberStats = cache(async (workspaceId: string, memberId: string
     task.assignees.some((person) => person.id === memberId),
   );
   const hours = mine.reduce((sum, entry) => sum + entry.hours, 0);
-  const rate = member?.hourlyRate ?? 0;
 
   return {
     hours: round1(hours),
     hoursExact: hours,
-    cost: mine.reduce((sum, entry) => sum + Math.round(entry.hours * rate), 0),
     tasks: assigned,
     tasksTotal: assigned.length,
     tasksDone: assigned.filter((task) => task.status === "done").length,
@@ -716,13 +740,7 @@ export const getMetrics = cache(async (workspaceId: string) => {
     getTeams(workspaceId),
   ]);
 
-  const rate = (userId: string) => members.find((m) => m.id === userId)?.hourlyRate ?? 0;
-  const cost = (list: TimeEntry[]) =>
-    list.reduce((sum, entry) => sum + Math.round(entry.hours * rate(entry.userId)), 0);
-
   const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0);
-  const billable = entries.filter((entry) => entry.billable);
-  const billableHours = billable.reduce((sum, entry) => sum + entry.hours, 0);
   const done = tasks.filter((task) => task.status === "done").length;
   const overdue = tasks.filter(
     (task) => task.dueDate && task.dueDate < todayIso() && task.status !== "done",
@@ -737,12 +755,7 @@ export const getMetrics = cache(async (workspaceId: string) => {
     tasksDone: done,
     completionRate: percent(done, tasks.length),
     hoursTracked: round1(totalHours),
-    billableHours: round1(billableHours),
     totalHoursExact: totalHours,
-    billableHoursExact: billableHours,
-    billablePercent: percent(billableHours, totalHours),
-    billableRevenue: cost(billable),
-    cost: cost(entries),
     memberCount: members.length,
     teamCount: teams.length,
     overdueCount: overdue,

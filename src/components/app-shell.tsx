@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, PanelLeft } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { GlobalTimerIndicator } from "@/components/projects/global-timer-indicator";
 import { MobileNavigation } from "@/components/layout/mobile-navigation";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-media-query";
-import type { Project, RunningTimer, WorkspaceSummary } from "@/lib/domain";
+import type { AppNotification, Project, RunningTimer, WorkspaceSummary } from "@/lib/domain";
 import type { AppPage } from "@/lib/permissions";
 import type { ActiveSessionUser } from "@/lib/session";
 
@@ -25,6 +26,8 @@ export function AppShell({
   canManageFeatures,
   badges,
   runningTimer,
+  notifications,
+  unreadNotifications,
   children,
 }: {
   user: ActiveSessionUser;
@@ -38,6 +41,9 @@ export function AppShell({
   badges?: Record<string, number>;
   /** The viewer's running timer, shown in the header on every page. */
   runningTimer: RunningTimer | null;
+  /** The viewer's latest notifications, and how many of theirs are unread. */
+  notifications: AppNotification[];
+  unreadNotifications: number;
   children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
@@ -100,9 +106,7 @@ export function AppShell({
           </Button>
           <div className="flex min-w-0 items-center gap-2">
             <GlobalTimerIndicator running={runningTimer} />
-            <Button variant="ghost" size="icon" aria-label="Notifications">
-              <Bell className="h-4 w-4" />
-            </Button>
+            <NotificationBell items={notifications} unread={unreadNotifications} />
           </div>
         </header>
 

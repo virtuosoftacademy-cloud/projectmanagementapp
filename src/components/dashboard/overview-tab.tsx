@@ -36,7 +36,7 @@ export async function OverviewTab({ workspaceId }: { workspaceId: string }) {
   const effort = await Promise.all(
     projects.map(async (project) => {
       const stats = await getProjectStats(workspaceId, project.id);
-      return { name: project.name, hours: stats.hours, cost: stats.cost };
+      return { name: project.name, hours: stats.hours };
     }),
   );
 
@@ -88,7 +88,7 @@ export async function OverviewTab({ workspaceId }: { workspaceId: string }) {
         </CardContent>
       </Card>
 
-      <Card className="border-destructive/30 bg-destructive/5 shadow-none">
+      {/* <Card className="border-destructive/30 bg-destructive/5 shadow-none">
         <CardHeader>
           <div className="flex items-center gap-2">
             <CircleAlert className="h-4 w-4 text-destructive" />
@@ -121,7 +121,7 @@ export async function OverviewTab({ workspaceId }: { workspaceId: string }) {
             ))
           )}
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 }

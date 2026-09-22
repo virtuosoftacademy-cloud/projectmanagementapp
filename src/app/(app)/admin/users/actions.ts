@@ -16,6 +16,7 @@ import {
   firstError,
   setDisabledSchema,
   updateRoleSchema,
+  updateUserSchema,
 } from "@/lib/validations";
 
 export type ActionResult = { ok: boolean; error?: string };
@@ -30,47 +31,32 @@ function refresh() {
 }
 
 /**
- * The two things `roles.manage` alone must not allow, now that admins hold it.
+ * What `roles.manage` alone must not allow.
  *
- * Without these an admin could hand themselves the owner role, or grant it to
- * someone else — which would make `roles.manage` a route to every owner-only
- * permission (account deletion) rather than a permission of its own.
+ * Changing your own role is how someone ends up locked out of the screen they
+ * were standing on, and it is never the intended click — another admin can do
+ * it instead. The last-admin guards below cover the rest.
  *
  * Returns an error to surface, or null when the change is allowed.
  */
 function guardRoleChange(
   actor: { id: string; role: Role },
   targetUserId: string,
-  currentRole: string,
-  nextRole: string,
 ): ActionResult | null {
-  // Applies to owners too. Changing your own role is how someone ends up
-  // locked out of the screen they were standing on, and it is never the
-  // intended click — a second owner or admin can do it instead.
   if (actor.id === targetUserId) {
     return { ok: false, error: "You cannot change your own role." };
   }
-
-  if (actor.role === "owner") return null;
-
-  if (nextRole === "owner") {
-    return { ok: false, error: "Only an owner can grant the owner role." };
-  }
-  if (currentRole === "OWNER") {
-    return { ok: false, error: "Only an owner can change another owner's role." };
-  }
-
   return null;
 }
 
-/** Owner count for a workspace, restricted to accounts that can still sign in. */
-async function activeOwnerCount(workspaceId: string) {
+/** Admin count for a workspace, restricted to accounts that can still sign in. */
+async function activeAdminCount(workspaceId: string) {
   return prisma.workspaceMember.count({
-    where: { workspaceId, role: "OWNER", user: { disabledAt: null } },
+    where: { workspaceId, role: "ADMIN", user: { disabledAt: null } },
   });
 }
 
-/** Create an account and add it to the caller's workspace. Owners and admins only. */
+/** Create an account and add it to the caller's workspace. Admins only. */
 export async function createUserAction(input: unknown): Promise<ActionResult> {
   const actor = await requirePermission("members.invite");
 
@@ -106,6 +92,53 @@ export async function createUserAction(input: unknown): Promise<ActionResult> {
   });
 
   refresh();
+  return { ok: true };
+}
+
+/**
+ * Edit an account's profile: who they are, where they sit, what they are
+ * expected to work.
+ *
+ * Role and the active flag are deliberately not here — each has its own
+ * control and its own last-admin guard, and folding them into a general edit
+ * form would route around both.
+ */
+export async function updateUserAction(input: unknown): Promise<ActionResult> {
+  const actor = await requirePermission("members.invite");
+
+  const parsed = updateUserSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
+  const user = await prisma.user.findUnique({
+    where: { id: data.userId },
+    select: { id: true },
+  });
+  if (!user) return { ok: false, error: "That account no longer exists." };
+
+  const clash = await prisma.user.findFirst({
+    where: { email: data.email, id: { not: data.userId } },
+    select: { id: true },
+  });
+  if (clash) return { ok: false, error: "Someone already uses that email." };
+
+  const team = await resolveWorkspaceTeamId(data.teamId, actor.workspaceId);
+  if (!team.ok) return { ok: false, error: "That team is not in this workspace." };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      name: data.name,
+      email: data.email,
+      phone: data.phone || null,
+      designation: data.designation || null,
+      teamId: team.teamId,
+      monthlyHours: data.monthlyHours,
+    },
+  });
+
+  refresh();
+  revalidatePath("/team-members");
   return { ok: true };
 }
 
@@ -149,12 +182,7 @@ export async function addMemberAction(formData: FormData): Promise<ActionResult>
       },
     });
 
-    // Only touch their team when one was chosen. `User.teamId` is a single
-    // column shared across every workspace they belong to, so silently
-    // clearing it here would unassign them elsewhere.
-    if (team.teamId) {
-      await tx.user.update({ where: { id: data.userId }, data: { teamId: team.teamId } });
-    }
+    await tx.user.update({ where: { id: data.userId }, data: { teamId: team.teamId } });
   });
 
   refresh();
@@ -187,7 +215,7 @@ export async function setUserPagesAction(
   });
   if (!membership) return { ok: false, error: "They are not in this workspace." };
 
-  // An owner locking themselves out of Users would leave no way back in.
+  // An admin locking themselves out of Users would leave no way back in.
   if (data.userId === actor.id) {
     return { ok: false, error: "You cannot change your own page access." };
   }
@@ -226,14 +254,14 @@ export async function setUsersDisabledAction(
   }
 
   if (parsed.data.disabled) {
-    // Never lock this workspace out of its last usable owner.
+    // Never lock this workspace out of its last usable admin.
     const owners = await prisma.workspaceMember.findMany({
-      where: { workspaceId: actor.workspaceId, role: "OWNER", user: { disabledAt: null } },
+      where: { workspaceId: actor.workspaceId, role: "ADMIN", user: { disabledAt: null } },
       select: { userId: true },
     });
     const remaining = owners.filter((owner) => !targets.includes(owner.userId));
     if (owners.length > 0 && remaining.length === 0) {
-      return { ok: false, error: "At least one owner must stay active." };
+      return { ok: false, error: "At least one admin must stay active." };
     }
   }
 
@@ -247,7 +275,7 @@ export async function setUsersDisabledAction(
 }
 
 /**
- * Permanently delete an account. Owners only, never the last owner of this
+ * Permanently delete an account. Admins only, never the last admin of this
  * workspace, and only for someone who is actually in it.
  *
  * This still deletes the whole account, not just this workspace's membership
@@ -266,9 +294,9 @@ export async function deleteUserAction(userId: string): Promise<ActionResult> {
   });
   if (!membership) return { ok: false, error: "That account no longer exists." };
 
-  if (membership.role === "OWNER") {
-    const owners = await activeOwnerCount(actor.workspaceId);
-    if (owners <= 1) return { ok: false, error: "The workspace must keep at least one owner." };
+  if (membership.role === "ADMIN") {
+    const owners = await activeAdminCount(actor.workspaceId);
+    if (owners <= 1) return { ok: false, error: "The workspace must keep at least one admin." };
   }
 
   // Task assignments and time entries cascade — deleting an account erases the
@@ -293,12 +321,12 @@ export async function setUserRoleAction(userId: string, role: string): Promise<A
   });
   if (!membership) return { ok: false, error: "That account no longer exists." };
 
-  const guard = guardRoleChange(actor, parsed.data.userId, membership.role, parsed.data.role);
+  const guard = guardRoleChange(actor, parsed.data.userId);
   if (guard) return guard;
 
-  if (membership.role === "OWNER" && parsed.data.role !== "owner") {
-    const owners = await activeOwnerCount(actor.workspaceId);
-    if (owners <= 1) return { ok: false, error: "The workspace must keep at least one owner." };
+  if (membership.role === "ADMIN" && parsed.data.role !== "admin") {
+    const owners = await activeAdminCount(actor.workspaceId);
+    if (owners <= 1) return { ok: false, error: "The workspace must keep at least one admin." };
   }
 
   await prisma.workspaceMember.update({

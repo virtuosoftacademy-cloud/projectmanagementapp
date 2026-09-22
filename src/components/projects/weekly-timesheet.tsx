@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { ChartNoAxesColumn, ChevronLeft, ChevronRight } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { WEEKDAY_LABELS, formatDay, getWeekDays, shiftWeek } from "@/lib/domain";
 import { formatDuration } from "@/lib/utils";
 
@@ -23,6 +25,7 @@ export function WeeklyTimesheet({
   initialWeek: string;
 }) {
   const [anchor, setAnchor] = useState(initialWeek);
+  const [viewing, setViewing] = useState<TimesheetRow | null>(null);
   const days = getWeekDays(anchor);
 
   const dayTotal = (date: string) =>
@@ -82,14 +85,19 @@ export function WeeklyTimesheet({
                 {rows.map((row) => (
                   <tr key={row.memberId} className="border-b transition-colors hover:bg-muted/20">
                     <td className="whitespace-nowrap px-4 py-2">
-                      <span className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 rounded text-left hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`Time analytics for ${row.name}`}
+                        onClick={() => setViewing(row)}
+                      >
                         <UserAvatar
                           name={row.name}
                           className="h-6 w-6 bg-primary/10"
                           textClassName="text-[10px] text-primary"
                         />
                         {row.name}
-                      </span>
+                      </button>
                     </td>
                     {days.map((date) => (
                       <td key={date} className="px-3 py-2 text-center font-mono">
@@ -112,6 +120,13 @@ export function WeeklyTimesheet({
         <Summary label="Team Members" value={rows.length.toString()} />
         <Summary label="Entries" value={entryCount.toString()} />
       </div>
+      {viewing ? (
+        <MemberWeekDialog
+          row={viewing}
+          days={days}
+          onClose={() => setViewing(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -126,5 +141,89 @@ function Summary({ label, value }: { label: string; value: string }) {
         <p className="mt-1 font-mono text-2xl font-bold">{value}</p>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * One person's week, from the row already on screen: hours per day, the total,
+ * their busiest day, and a way through to their full analytics.
+ */
+function MemberWeekDialog({
+  row,
+  days,
+  onClose,
+}: {
+  row: TimesheetRow;
+  days: string[];
+  onClose: () => void;
+}) {
+  const hours = days.map((date) => row.byDate[date] ?? 0);
+  const total = hours.reduce((sum, value) => sum + value, 0);
+  const worked = hours.filter(Boolean).length;
+  const busiest = hours.reduce(
+    (best, value, index) => (value > hours[best] ? index : best),
+    0,
+  );
+  const peak = Math.max(...hours, 0);
+
+  return (
+    <FormDialog
+      open
+      onClose={onClose}
+      title={row.name}
+      description={`${formatDay(days[0])} — ${formatDay(days[days.length - 1])}`}
+    >
+      <div className="grid gap-4 py-2">
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">This week</p>
+            <p className="mt-1 font-mono text-xl font-bold">{formatDuration(total)}</p>
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Days worked</p>
+            <p className="mt-1 font-mono text-xl font-bold">
+              {worked}/{days.length}
+            </p>
+          </div>
+          <div className="rounded-md border p-3">
+            <p className="text-xs text-muted-foreground">Busiest</p>
+            <p className="mt-1 font-mono text-xl font-bold">
+              {peak ? formatDuration(peak) : "—"}
+            </p>
+            {peak ? (
+              <p className="text-[11px] text-muted-foreground">{WEEKDAY_LABELS[busiest]}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <ul className="space-y-1.5">
+          {days.map((date, index) => (
+            <li key={date} className="flex items-center gap-3 text-sm">
+              <span className="w-24 shrink-0 text-muted-foreground">
+                {WEEKDAY_LABELS[index]} {formatDay(date)}
+              </span>
+              <span className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                <span
+                  className="block h-full rounded-full bg-primary"
+                  style={{ width: peak ? `${(hours[index] / peak) * 100}%` : "0%" }}
+                />
+              </span>
+              <span className="w-14 shrink-0 text-right font-mono">
+                {hours[index] ? formatDuration(hours[index]) : "—"}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/team-members/${row.memberId}`}>
+              <ChartNoAxesColumn className="h-3.5 w-3.5" />
+              Full analytics
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
   );
 }

@@ -16,11 +16,21 @@ import { secondsSince } from "@/lib/duration";
  * Starts at zero rather than at the real elapsed time so the server render and
  * the first client render agree; the first sample lands a tick later.
  */
-export function useElapsed(startedAt: string | null) {
+export function useElapsed(startedAt: string | null, pausedAt: string | null = null) {
   const [seconds, setSeconds] = useState(0);
 
   useEffect(() => {
     if (!startedAt) return;
+
+    // Paused: the number is fixed, so read it once and stop ticking.
+    if (pausedAt) {
+      const frozen = Math.max(
+        0,
+        Math.floor((new Date(pausedAt).getTime() - new Date(startedAt).getTime()) / 1000),
+      );
+      const once = setTimeout(() => setSeconds(frozen), 0);
+      return () => clearTimeout(once);
+    }
 
     const sample = () => setSeconds(secondsSince(startedAt));
     // The first sample is scheduled rather than taken in the effect body: this
@@ -36,7 +46,7 @@ export function useElapsed(startedAt: string | null) {
       clearTimeout(first);
       clearInterval(id);
     };
-  }, [startedAt]);
+  }, [startedAt, pausedAt]);
 
   // Guarded rather than reset in the effect, so a timer that stops reads zero
   // on the very next render instead of briefly showing its last value.

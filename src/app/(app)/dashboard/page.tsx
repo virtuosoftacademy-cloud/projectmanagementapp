@@ -2,13 +2,12 @@ import type { Metadata } from "next";
 import {
   CircleAlert,
   Clock,
-  Download,
   FolderKanban,
   SquareCheckBig,
   Users,
-  Wallet,
 } from "lucide-react";
 import { ActivityTab } from "@/components/dashboard/activity-tab";
+import { ExportReportButton } from "@/components/dashboard/export-report-button";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { OverviewTab } from "@/components/dashboard/overview-tab";
 import { ProjectsTab } from "@/components/dashboard/projects-tab";
@@ -17,9 +16,8 @@ import {
   type TeamBreakdownRow,
 } from "@/components/dashboard/team-breakdown";
 import { TeamTab } from "@/components/dashboard/team-tab";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { TabbedPanel } from "@/components/ui/tabbed-panel";
+import { todayIso } from "@/lib/domain";
 import { can } from "@/lib/permissions";
 import {
   getActivity,
@@ -29,9 +27,9 @@ import {
   getProjectStats,
   getProjects,
   getTeams,
+  getWorkspace,
 } from "@/lib/queries";
 import { projectScope, requirePage } from "@/lib/session";
-import { formatPkr } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Admin Dashboard",
@@ -40,12 +38,13 @@ export const metadata: Metadata = {
 
 export default async function DashboardPage() {
   const viewer = await requirePage("dashboard");
-  const [metrics, projects, members, activity, teams] = await Promise.all([
+  const [metrics, projects, members, activity, teams, workspace] = await Promise.all([
     getMetrics(viewer.workspaceId),
     getProjects(viewer.workspaceId, await projectScope()),
     getMembers(viewer.workspaceId),
     getActivity(viewer.workspaceId),
     getTeams(viewer.workspaceId),
+    getWorkspace(viewer.workspaceId),
   ]);
 
   const projectRows = await Promise.all(
@@ -69,6 +68,48 @@ export default async function DashboardPage() {
    * People and projects with no team are collected into one trailing bucket,
    * which is only shown when it actually holds something.
    */
+  /**
+   * The CSV behind "Export Report": the same figures the cards and tables show,
+   * flattened into one sheet — summary, then a row per project, then per person.
+   */
+  const reportRows: string[][] = [
+    ["Workspace", workspace?.name ?? ""],
+    ["Generated", todayIso()],
+    [],
+    ["Summary"],
+    ["Projects", String(metrics.totalProjects)],
+    ["Active projects", String(metrics.activeProjects)],
+    ["Tasks", String(metrics.tasksTotal)],
+    ["Tasks done", String(metrics.tasksDone)],
+    ["Completion rate", `${metrics.completionRate}%`],
+    ["Hours tracked", String(metrics.hoursTracked)],
+    ["Overdue tasks", String(metrics.overdueCount)],
+    ["Members", String(metrics.memberCount)],
+    ["Teams", String(metrics.teamCount)],
+    [],
+    ["Projects", "Status", "Team", "Tasks done", "Tasks", "Progress %", "Hours"],
+    ...projectRows.map((row) => [
+      row.project.name,
+      row.project.status,
+      teams.find((team) => team.id === row.project.teamId)?.name ?? "",
+      String(row.stats.done),
+      String(row.stats.taskCount),
+      String(row.stats.progress),
+      String(row.stats.hours),
+    ]),
+    [],
+    ["Members", "Role", "Team", "Tasks done", "Tasks", "Hours", "Utilization %"],
+    ...memberRows.map((row) => [
+      row.member.name,
+      row.member.role,
+      teams.find((team) => team.id === row.member.teamId)?.name ?? "",
+      String(row.stats.tasksDone),
+      String(row.stats.tasksTotal),
+      String(row.stats.hours),
+      String(row.stats.utilization),
+    ]),
+  ];
+
   const unassigned = {
     memberCount: members.filter((member) => member.teamId === null).length,
     projects: projectRows.filter((row) => row.project.teamId === null),
@@ -86,25 +127,23 @@ export default async function DashboardPage() {
         tasksDone: owned.reduce((sum, row) => sum + row.stats.done, 0),
         tasksTotal: owned.reduce((sum, row) => sum + row.stats.taskCount, 0),
         hours: owned.reduce((sum, row) => sum + row.stats.hours, 0),
-        cost: owned.reduce((sum, row) => sum + row.stats.cost, 0),
         unassigned: false,
       };
     }),
     ...(unassigned.memberCount > 0 || unassigned.projects.length > 0
       ? [
-          {
-            id: "__unassigned",
-            name: "No team",
-            color: "transparent",
-            memberCount: unassigned.memberCount,
-            projectCount: unassigned.projects.length,
-            tasksDone: unassigned.projects.reduce((sum, row) => sum + row.stats.done, 0),
-            tasksTotal: unassigned.projects.reduce((sum, row) => sum + row.stats.taskCount, 0),
-            hours: unassigned.projects.reduce((sum, row) => sum + row.stats.hours, 0),
-            cost: unassigned.projects.reduce((sum, row) => sum + row.stats.cost, 0),
-            unassigned: true,
-          },
-        ]
+        {
+          id: "__unassigned",
+          name: "No team",
+          color: "transparent",
+          memberCount: unassigned.memberCount,
+          projectCount: unassigned.projects.length,
+          tasksDone: unassigned.projects.reduce((sum, row) => sum + row.stats.done, 0),
+          tasksTotal: unassigned.projects.reduce((sum, row) => sum + row.stats.taskCount, 0),
+          hours: unassigned.projects.reduce((sum, row) => sum + row.stats.hours, 0),
+          unassigned: true,
+        },
+      ]
       : []),
   ];
 
@@ -112,31 +151,27 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold leading-tight tracking-tight">Admin Dashboard</h1>
+          <h1 className="text-2xl font-bold leading-tight tracking-tight">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Welcome back, {viewer.name.split(" ")[0]} — here&apos;s the full pulse of your
             workspace.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="gap-1.5">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
-            Live
-          </Badge>
           {can(viewer.role, "reports.view") ? (
-            <Button variant="outline" size="sm">
-              <Download className="h-3.5 w-3.5" />
-              Export Report
-            </Button>
+            <ExportReportButton
+              rows={reportRows}
+              name={`${workspace?.name ?? "workspace"} dashboard`}
+              today={todayIso()}
+            />
           ) : null}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
         <KpiCard
           icon={FolderKanban}
           tone="primary"
-          delta={12}
           value={metrics.activeProjects.toString()}
           label="Active Projects"
           hint={`${metrics.totalProjects} total`}
@@ -144,7 +179,6 @@ export default async function DashboardPage() {
         <KpiCard
           icon={SquareCheckBig}
           tone="success"
-          delta={5}
           value={`${metrics.completionRate}%`}
           label="Task Completion"
           hint={`${metrics.tasksDone}/${metrics.tasksTotal} done`}
@@ -152,18 +186,9 @@ export default async function DashboardPage() {
         <KpiCard
           icon={Clock}
           tone="warning"
-          delta={8}
           value={metrics.hoursTracked.toString()}
           label="Hours Tracked"
-          hint={`${metrics.billablePercent}% billable`}
-        />
-        <KpiCard
-          icon={Wallet}
-          tone="primary"
-          delta={18}
-          value={formatPkr(metrics.billableRevenue)}
-          label="Billable Revenue"
-          hint={`Cost ${formatPkr(metrics.cost)}`}
+          hint={`across ${metrics.totalProjects} projects`}
         />
         <KpiCard
           icon={Users}
@@ -181,7 +206,8 @@ export default async function DashboardPage() {
         />
       </div>
 
-      <TabbedPanel
+      <OverviewTab workspaceId={viewer.workspaceId} />
+      {/* <TabbedPanel
         items={[
           {
             value: "overview",
@@ -204,7 +230,7 @@ export default async function DashboardPage() {
           },
           { value: "activity", label: "Activity", content: <ActivityTab entries={activity} /> },
         ]}
-      />
+      /> */}
     </div>
   );
 }

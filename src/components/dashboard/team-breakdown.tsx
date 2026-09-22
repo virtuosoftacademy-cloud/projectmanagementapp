@@ -2,7 +2,6 @@ import { FolderKanban, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatPkr } from "@/lib/utils";
 
 export type TeamBreakdownRow = {
   id: string;
@@ -13,7 +12,6 @@ export type TeamBreakdownRow = {
   tasksDone: number;
   tasksTotal: number;
   hours: number;
-  cost: number;
   /** True for the synthetic bucket holding people and projects with no team. */
   unassigned: boolean;
 };
@@ -89,9 +87,8 @@ export function TeamBreakdown({ rows }: { rows: TeamBreakdownRow[] }) {
                   <Progress value={progress} aria-label={`${row.name} task progress`} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 border-t pt-2 text-center">
+                <div className="grid gap-2 border-t pt-2 text-center">
                   <Tile value={`${row.hours.toFixed(1)}h`} label="Logged" />
-                  <Tile value={formatPkr(row.cost)} label="Cost" />
                 </div>
               </CardContent>
             </Card>

@@ -16,12 +16,14 @@ import {
   CornerDownRight,
   Minus,
   MoreHorizontal,
+  Pause,
   Pencil,
   Play,
   Plus,
   Square,
   Trash2,
 } from "lucide-react";
+import { TimerDialog } from "@/components/projects/timer-controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -41,7 +43,9 @@ import {
 import { FilePicker } from "@/components/ui/file-picker";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { SelectField } from "@/components/ui/select-field";
 import { Textarea } from "@/components/ui/textarea";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { useElapsed } from "@/hooks/use-elapsed";
 import { TASK_STATUSES } from "@/lib/domain";
 import { formatClock, formatMinutes } from "@/lib/duration";
@@ -64,12 +68,14 @@ import {
   createSubtaskAction,
   deleteAttachmentAction,
   deleteSubtaskAction,
+  pauseTimerAction,
+  resumeTimerAction,
   startTimerAction,
   stopTimerAction,
   updateSubtaskAction,
   uploadTaskFileAction,
 } from "@/lib/task-actions";
-import type { RunningTimer, Subtask, TaskStatus } from "@/lib/domain";
+import type { Person, RunningTimer, Subtask, TaskStatus } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 type Result = { ok: boolean; error?: string };
@@ -88,11 +94,14 @@ export function TaskSubtasks({
   taskId,
   taskTitle,
   subtasks,
+  members,
   running,
   canManage,
   canLog,
 }: {
   taskId: string;
+  /** The task's assignees — the only people a subtask can go to. */
+  members: Person[];
   /** The root of the diagram. */
   taskTitle: string;
   subtasks: Subtask[];
@@ -148,6 +157,9 @@ export function TaskSubtasks({
   }
 
   const actions: NodeActions = {
+    taskId,
+    taskTitle,
+    members,
     pending,
     canManage,
     canLog,
@@ -169,6 +181,8 @@ export function TaskSubtasks({
     startTimer: (subtaskId) =>
       run(() => startTimerAction({ taskId, subtaskId, note: "" })),
     stopTimer: () => run(stopTimerAction),
+    pauseTimer: () => run(pauseTimerAction),
+    resumeTimer: () => run(resumeTimerAction),
   };
 
   return (
@@ -284,6 +298,9 @@ function describeRemoval(node: SubtaskNode) {
 }
 
 type NodeActions = {
+  taskId: string;
+  taskTitle: string;
+  members: Person[];
   pending: boolean;
   saveEdit: (node: SubtaskNode, values: SubtaskEdit, onDone: () => void) => void;
   error: string | null;
@@ -301,6 +318,8 @@ type NodeActions = {
   remove: (node: SubtaskNode) => void;
   startTimer: (subtaskId: string) => void;
   stopTimer: () => void;
+  pauseTimer: () => void;
+  resumeTimer: () => void;
 };
 
 export const statusIcon: Record<TaskStatus, typeof Circle> = {
@@ -353,6 +372,7 @@ function SubtaskBranch({
   const [adding, setAdding] = useState(false);
   const [viewing, setViewing] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [timingOpen, setTiming] = useState(false);
 
   const hasChildren = node.children.length > 0;
   const open = hasChildren && !actions.collapsed.has(node.id);
@@ -401,6 +421,14 @@ function SubtaskBranch({
                   >
                     {node.title}
                   </span>
+                  {node.assignee ? (
+                    <UserAvatar
+                      name={node.assignee.name}
+                      image={node.assignee.image}
+                      className="ml-auto size-5 shrink-0"
+                      textClassName="text-[9px]"
+                    />
+                  ) : null}
                 </span>
                 <span className="mt-0.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                   <span className="flex min-w-0 items-center gap-1.5">
@@ -462,19 +490,10 @@ function SubtaskBranch({
               ) : null}
 
               {actions.canLog ? (
-                timing ? (
-                  <DropdownMenuItem onSelect={actions.stopTimer}>
-                    <Square className="h-3.5 w-3.5" />
-                    Stop timer
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    onSelect={() => actions.startTimer(node.id)}
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                    Start timer
-                  </DropdownMenuItem>
-                )
+                <DropdownMenuItem onSelect={() => setTiming(true)}>
+                  <Play className="h-3.5 w-3.5" />
+                  Start timer
+                </DropdownMenuItem>
               ) : null}
 
               {actions.canManage ? (
@@ -547,6 +566,7 @@ function SubtaskBranch({
       {adding ? (
         <AddSubtaskDialog
           parentTitle={node.title}
+          members={actions.members}
           pending={actions.pending}
           onClose={() => setAdding(false)}
           error={actions.error}
@@ -557,6 +577,7 @@ function SubtaskBranch({
       {editing ? (
         <EditSubtaskDialog
           subtask={node}
+          members={actions.members}
           pending={actions.pending}
           error={actions.error}
           onClose={() => setEditing(false)}
@@ -564,10 +585,29 @@ function SubtaskBranch({
         />
       ) : null}
 
+      {timingOpen ? (
+        <TimerDialog
+          open
+          onClose={() => setTiming(false)}
+          taskId={actions.taskId}
+          taskTitle={actions.taskTitle}
+          subtaskId={node.id}
+          subtaskTitle={node.title}
+          running={actions.running}
+        />
+      ) : null}
+
       {viewing ? (
         <SubtaskDetailsDialog
           subtask={node}
           canManage={actions.canManage}
+          canLog={actions.canLog}
+          running={actions.running}
+          pending={actions.pending}
+          onStartTimer={() => actions.startTimer(node.id)}
+          onStopTimer={actions.stopTimer}
+          onPauseTimer={actions.pauseTimer}
+          onResumeTimer={actions.resumeTimer}
           onClose={() => setViewing(false)}
           onEdit={() => {
             setViewing(false);
@@ -587,6 +627,43 @@ function SubtaskBranch({
   );
 }
 
+function AssigneeField({
+  value,
+  current,
+  onChange,
+  members,
+  disabled,
+}: {
+  value: string;
+  /** Whoever holds it now, listed even if they have since left the task. */
+  current: Person | null;
+  onChange: (value: string) => void;
+  members: Person[];
+  disabled?: boolean;
+}) {
+  const people =
+    current && !members.some((member) => member.id === current.id)
+      ? [...members, current]
+      : members;
+
+  return (
+    <Field label="Assignee" required>
+      <SelectField
+        value={value}
+        disabled={disabled || people.length === 0}
+        placeholder="Who is doing this?"
+        onValueChange={onChange}
+        options={people.map((member) => ({ value: member.id, label: member.name }))}
+      />
+      {people.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Nobody is on this task yet — assign someone to it first.
+        </p>
+      ) : null}
+    </Field>
+  );
+}
+
 /**
  * One subtask, read-only: what it says, what is attached, and its actions.
  * Shared by the mind map and by the rows drawn under a board card.
@@ -594,19 +671,41 @@ function SubtaskBranch({
 export function SubtaskDetailsDialog({
   subtask,
   canManage,
+  canLog,
+  running,
+  pending,
   onClose,
   onEdit,
   onDelete,
   onAddChild,
+  onStartTimer,
+  onStopTimer,
+  onPauseTimer,
+  onResumeTimer,
 }: {
   subtask: Subtask;
   canManage: boolean;
+  /** `time.log` — whether the timer controls are offered. */
+  canLog: boolean;
+  /** The viewer's running timer, anywhere. */
+  running: RunningTimer | null;
+  pending: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onAddChild: () => void;
+  onStartTimer: () => void;
+  onStopTimer: () => void;
+  onPauseTimer: () => void;
+  onResumeTimer: () => void;
 }) {
   const label = TASK_STATUSES.find((item) => item.status === subtask.status)?.label;
+  const timing = running?.subtaskId === subtask.id;
+  const paused = Boolean(timing && running?.pausedAt);
+  const elapsed = useElapsed(
+    timing && running ? running.startedAt : null,
+    timing ? (running?.pausedAt ?? null) : null,
+  );
 
   return (
     <FormDialog open onClose={onClose} title={subtask.title}>
@@ -651,6 +750,76 @@ export function SubtaskDetailsDialog({
             </DropdownMenu>
           ) : null}
         </div>
+
+        <div className="flex items-center gap-2 text-sm">
+          {subtask.assignee ? (
+            <>
+              <UserAvatar
+                name={subtask.assignee.name}
+                image={subtask.assignee.image}
+                className="size-6"
+                textClassName="text-[10px]"
+              />
+              <span>{subtask.assignee.name}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">Not assigned</span>
+          )}
+        </div>
+
+        {canLog ? (
+          <div
+            className={cn(
+              "flex items-center justify-between gap-3 rounded-md border p-2.5",
+              timing && !paused && "border-success/50 bg-success/5",
+              paused && "border-warning/50 bg-warning/5",
+            )}
+          >
+            <span className="text-sm">
+              {timing ? (
+                <span
+                  className={cn(
+                    "font-mono tabular-nums",
+                    paused ? "text-warning" : "text-success",
+                  )}
+                >
+                  {formatClock(elapsed)}
+                  {paused ? <span className="ml-2 font-sans text-xs">Paused</span> : null}
+                </span>
+              ) : running ? (
+                <span className="text-muted-foreground">
+                  A timer is running on {running.taskTitle}. Starting here stops and saves it.
+                </span>
+              ) : (
+                <span className="text-muted-foreground">No timer running.</span>
+              )}
+            </span>
+            {timing ? (
+              <div className="flex items-center gap-2">
+                {paused ? (
+                  <Button size="sm" variant="outline" disabled={pending} onClick={onResumeTimer}>
+                    <Play className="h-3.5 w-3.5" />
+                    Resume
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" disabled={pending} onClick={onPauseTimer}>
+                    <Pause className="h-3.5 w-3.5" />
+                    Pause
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" disabled={pending} onClick={onStopTimer}>
+                  <Square className="h-3.5 w-3.5" />
+                  Stop
+                </Button>
+              </div>
+            ) : (
+              <Button size="sm" disabled={pending} onClick={onStartTimer}>
+                <Play className="h-3.5 w-3.5" />
+                Start timer
+              </Button>
+            )}
+          </div>
+        ) : null}
 
         {subtask.description ? (
           <p className="whitespace-pre-wrap text-sm">{subtask.description}</p>
@@ -697,6 +866,8 @@ export function SubtaskDetailsDialog({
 export type SubtaskEdit = {
   title: string;
   description: string;
+  /** Empty means nobody. */
+  assigneeId: string;
   /** Ids of existing files to delete. */
   removeFileIds: string[];
   file: File | null;
@@ -705,12 +876,14 @@ export type SubtaskEdit = {
 /** Edit a subtask's title and description, and add or remove its files. Mounted only while open. */
 export function EditSubtaskDialog({
   subtask,
+  members,
   pending,
   error,
   onClose,
   onSubmit,
 }: {
   subtask: Subtask;
+  members: Person[];
   pending: boolean;
   error?: string | null;
   onClose: () => void;
@@ -718,6 +891,8 @@ export function EditSubtaskDialog({
 }) {
   const [title, setTitle] = useState(subtask.title);
   const [description, setDescription] = useState(subtask.description);
+  const [assigneeId, setAssigneeId] = useState(subtask.assignee?.id ?? "");
+  const currentAssignee = subtask.assignee;
   const [removing, setRemoving] = useState<Set<string>>(() => new Set());
   const [file, setFile] = useState<File | null>(null);
 
@@ -737,10 +912,11 @@ export function EditSubtaskDialog({
         onSubmit={(event) => {
           event.preventDefault();
           const trimmed = title.trim();
-          if (!trimmed) return;
+          if (!trimmed || !assigneeId) return;
           onSubmit({
             title: trimmed,
             description: description.trim(),
+            assigneeId,
             removeFileIds: [...removing],
             file,
           });
@@ -766,6 +942,13 @@ export function EditSubtaskDialog({
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
+        <AssigneeField
+          value={assigneeId}
+          current={currentAssignee}
+          onChange={setAssigneeId}
+          members={members}
+          disabled={pending}
+        />
         {subtask.files.length ? (
           <Field label="Files">
             <ul className="space-y-1.5">
@@ -818,7 +1001,7 @@ export function EditSubtaskDialog({
           <DialogActions
             onCancel={onClose}
             submitLabel={pending ? "Saving…" : "Save"}
-            disabled={pending || !title.trim()}
+            disabled={pending || !title.trim() || !assigneeId}
           />
         </div>
       </form>
@@ -835,6 +1018,7 @@ export async function saveSubtaskEdit(
     subtaskId: subtask.id,
     title: values.title,
     description: values.description,
+    assigneeId: values.assigneeId,
   });
   if (!updated.ok) return updated;
 
@@ -857,12 +1041,14 @@ export async function saveSubtaskEdit(
 /** Name a new subtask to nest under `parentTitle`. Mounted only while open. */
 export function AddSubtaskDialog({
   parentTitle,
+  members,
   pending,
   error,
   onClose,
   onSubmit,
 }: {
   parentTitle: string;
+  members: Person[];
   pending: boolean;
   error?: string | null;
   onClose: () => void;
@@ -870,6 +1056,8 @@ export function AddSubtaskDialog({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [assigneeId, setAssigneeId] = useState("");
+  const currentAssignee = null;
   const [file, setFile] = useState<File | null>(null);
 
   return (
@@ -879,7 +1067,9 @@ export function AddSubtaskDialog({
         onSubmit={(event) => {
           event.preventDefault();
           const trimmed = title.trim();
-          if (trimmed) onSubmit({ title: trimmed, description: description.trim(), file });
+          if (trimmed && assigneeId) {
+            onSubmit({ title: trimmed, description: description.trim(), assigneeId, file });
+          }
         }}
       >
         <Field label="Title" required>
@@ -902,6 +1092,13 @@ export function AddSubtaskDialog({
             onChange={(event) => setDescription(event.target.value)}
           />
         </Field>
+        <AssigneeField
+          value={assigneeId}
+          current={currentAssignee}
+          onChange={setAssigneeId}
+          members={members}
+          disabled={pending}
+        />
         <Field label="File">
           <FilePicker
             value={file}
@@ -921,7 +1118,7 @@ export function AddSubtaskDialog({
           <DialogActions
             onCancel={onClose}
             submitLabel={pending ? "Saving…" : "Add subtask"}
-            disabled={pending || !title.trim()}
+            disabled={pending || !title.trim() || !assigneeId}
           />
         </div>
       </form>
@@ -929,7 +1126,13 @@ export function AddSubtaskDialog({
   );
 }
 
-export type NewSubtask = { title: string; description: string; file: File | null };
+export type NewSubtask = {
+  title: string;
+  description: string;
+  /** Empty means nobody. */
+  assigneeId: string;
+  file: File | null;
+};
 
 /**
  * Create a subtask, then upload its file. Two requests because one file can
@@ -946,6 +1149,7 @@ export async function createSubtaskWithFile(
     parentId,
     title: values.title,
     description: values.description,
+    assigneeId: values.assigneeId,
   });
   if (!created.ok || !created.id || !values.file) return created;
 
@@ -972,7 +1176,10 @@ function SubtaskTime({
   timing: boolean;
   running: RunningTimer | null;
 }) {
-  const elapsed = useElapsed(timing && running ? running.startedAt : null);
+  const elapsed = useElapsed(
+    timing && running ? running.startedAt : null,
+    timing ? (running?.pausedAt ?? null) : null,
+  );
   const { trackedMinutes, estimateMinutes } = node.rollup;
   const over = estimateMinutes > 0 && trackedMinutes > estimateMinutes;
 

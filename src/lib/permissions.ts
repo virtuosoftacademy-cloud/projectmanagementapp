@@ -9,30 +9,30 @@ import { type Role } from "@/lib/domain";
  * database enum once, at the session boundary.
  */
 export const PERMISSIONS = {
-  "projects.view": ["owner", "admin", "manager", "member", "viewer", "guest"],
-  "projects.create": ["owner", "admin", "manager", "member"],
-  "projects.edit": ["owner", "admin", "manager", "member"],
-  "projects.delete": ["owner", "admin"],
-  "tasks.manage": ["owner", "admin", "manager", "member"],
-  "time.log": ["owner", "admin", "manager", "member"],
+  "projects.view": ["admin", "manager", "member", "viewer", "guest"],
+  "projects.create": ["admin", "manager", "member"],
+  "projects.edit": ["admin", "manager", "member"],
+  "projects.delete": ["admin"],
+  "tasks.manage": ["admin", "manager", "member"],
+  "time.log": ["admin", "manager", "member"],
   // Correcting or removing *other people's* time entries. Everyone may fix
   // their own; changing someone else's is a supervisory act, and it moves what
   // the reports and invoices say.
-  "time.manage": ["owner", "admin", "manager"],
-  "reports.view": ["owner", "admin", "manager", "member", "viewer"],
-  "members.invite": ["owner", "admin"],
-  // Granting and changing what someone may do — owner and admin, matching who
+  "time.manage": ["admin", "manager"],
+  "reports.view": ["admin", "manager", "member", "viewer"],
+  "members.invite": ["admin"],
+  // Granting and changing what someone may do, matching who
   // may add a user in the first place.
-  "roles.manage": ["owner", "admin"],
+  "roles.manage": ["admin"],
   // Permanently deleting an account is not a permission change: it destroys
-  // their time entries and task history, so it stays with the owner.
-  "members.delete": ["owner"],
-  "workspace.create": ["owner", "admin"],
-  "workspace.settings": ["owner", "admin"],
+  // their time entries and task history, so it stays with admins.
+  "members.delete": ["admin"],
+  "workspace.create": ["admin"],
+  "workspace.settings": ["admin"],
   // Deleting a workspace destroys everything inside it, so it sits with the
-  // owner — and the action additionally requires ownership of the *target*
+  // admin — and the action additionally requires admin of the *target*
   // workspace, not merely of the one the session is currently in.
-  "workspace.delete": ["owner"],
+  "workspace.delete": ["admin"],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -55,21 +55,21 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "workspace.delete": "Delete workspaces",
 };
 
-export const ROLES: Role[] = ["owner", "admin", "manager", "member", "viewer", "guest"];
+export const ROLES: Role[] = ["admin", "manager", "member", "viewer", "guest"];
 
 /**
  * The one role that cannot be edited or deleted.
  *
- * Owner is the workspace's floor. It is the only role holding `roles.manage`
- * that cannot itself be edited, and the last-owner guards mean a workspace
+ * Admin is the workspace's floor. It is the only role holding `roles.manage`
+ * that cannot itself be edited, and the last-admin guards mean a workspace
  * always keeps one — so there is always somebody who can restore any other
  * role that was edited or deleted by mistake.
  *
- * Every other role, Admin included, is a `CustomRole` row: editable, deletable,
- * and bounded by the base role it inherits from. The enum values still exist as
- * those ceilings, but they are no longer roles you hold directly.
+ * Every other role is a `CustomRole` row: editable, deletable, and bounded by
+ * the base role it inherits from. The enum values still exist as those
+ * ceilings, but they are no longer roles you hold directly.
  */
-export const FIXED_ROLES: Role[] = ["owner"];
+export const FIXED_ROLES: Role[] = ["admin"];
 
 export function isFixedRole(role: string): boolean {
   return (FIXED_ROLES as string[]).includes(role);
@@ -88,7 +88,7 @@ export function permissionsFor(role: Role): Permission[] {
   return PERMISSION_KEYS.filter((permission) => can(role, permission));
 }
 
-/** `owner` -> `Owner`, for display. */
+/** `admin` -> `Admin`, for display. */
 export function roleLabel(role: Role) {
   return role.charAt(0).toUpperCase() + role.slice(1);
 }

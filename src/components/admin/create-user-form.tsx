@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Check, CircleAlert, Eye, EyeOff, Key, Shield, User, X } from "lucide-react";
 import { createUserAction } from "@/app/(app)/admin/users/actions";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -274,11 +275,9 @@ export function CreateUserForm({
           </div>
 
           <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={draft.active}
-              onChange={(event) => set("active", event.target.checked)}
-              className="h-4 w-4 accent-[hsl(var(--primary))]"
+              onCheckedChange={(checked) => set("active", checked === true)}
             />
             Active — they can sign in straight away
           </label>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { roleToDomain } from "@/lib/mappers";
+import { ensureWorkspaceRoles } from "@/lib/default-roles";
 import { can } from "@/lib/permissions";
 import { requireAccount } from "@/lib/session";
 import { createWorkspaceSchema, firstError } from "@/lib/validations";
@@ -14,7 +15,7 @@ export async function createWorkspaceAction(input: unknown): Promise<CreateWorks
 
   const memberships = await prisma.workspaceMember.count({ where: { userId: user.id } });
   if (memberships > 0 && !can(user.role, "workspace.create")) {
-    return { ok: false, error: "Only an owner or admin can create a workspace." };
+    return { ok: false, error: "Only an admin can create a workspace." };
   }
 
   const parsed = createWorkspaceSchema.safeParse(input);
@@ -29,9 +30,12 @@ export async function createWorkspaceAction(input: unknown): Promise<CreateWorks
       data: { name: data.name, slug: data.slug },
     });
     await tx.workspaceMember.create({
-      data: { workspaceId: created.id, userId: user.id, role: "OWNER" },
+      data: { workspaceId: created.id, userId: user.id, role: "ADMIN" },
     });
     await tx.user.update({ where: { id: user.id }, data: { lastWorkspaceId: created.id } });
+    // A new workspace starts with the default roles, so the Roles screen is
+    // usable from the first visit rather than empty but for Admin.
+    await ensureWorkspaceRoles(tx, created.id);
     return created;
   });
 
@@ -49,9 +53,9 @@ export type DeleteWorkspaceResult = {
  * Delete a workspace, provided it is empty of projects and teams.
  *
  * **Ownership is checked against the target**, not against the session's
- * current workspace. `requirePermission` would ask "is this person an owner
+ * current workspace. `requirePermission` would ask "is this person an admin
  * *here*", which is the wrong question when the card being deleted belongs to
- * a different workspace — someone who owns A and merely belongs to B could
+ * a different workspace — an admin of A who merely belongs to B could
  * otherwise delete B from A's session.
  *
  * The emptiness rule is what makes this safe to expose at all: deleting cascades
@@ -72,7 +76,7 @@ export async function deleteWorkspaceAction(
   if (!membership) return { ok: false, error: "That workspace no longer exists." };
 
   if (!can(roleToDomain[membership.role], "workspace.delete")) {
-    return { ok: false, error: "Only an owner of that workspace can delete it." };
+    return { ok: false, error: "Only an admin of that workspace can delete it." };
   }
 
   const workspace = await prisma.workspace.findUnique({

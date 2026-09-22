@@ -12,18 +12,20 @@ import {
   MoveRight,
   Paperclip,
   Pencil,
+  Play,
   Trash2,
 } from "lucide-react";
 import { AvatarStack } from "@/components/avatar-stack";
 import { statusIcon } from "@/components/projects/task-subtasks";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { formatDay, type Subtask, type Task } from "@/lib/domain";
+import { formatDay, type RunningTimer, type Subtask, type Task } from "@/lib/domain";
 import { priorityVariant, taskStatusColor } from "@/lib/status";
 import { buildSubtaskTree, flattenTree } from "@/lib/subtask-tree";
 import { isOptimizableImageSrc } from "@/lib/r2";
@@ -45,6 +47,9 @@ export function BoardCard({
   subtasks,
   today,
   canManage,
+  canLog,
+  running,
+  onTimerRequest,
   dragging,
   onDragStart,
   onDragEnd,
@@ -67,6 +72,12 @@ export function BoardCard({
    */
   today: string;
   canManage: boolean;
+  /** `time.log` — whether timer items are offered. */
+  canLog: boolean;
+  /** The viewer's running timer, anywhere. */
+  running: RunningTimer | null;
+  /** Opens the timer dialog for the card, or for one of its subtasks. */
+  onTimerRequest: (subtask: Subtask | null) => void;
   dragging: boolean;
   onDragStart: (event: React.DragEvent) => void;
   onDragEnd: () => void;
@@ -167,6 +178,12 @@ export function BoardCard({
                 <Pencil className="h-3.5 w-3.5" />
                 Edit
               </DropdownMenuItem>
+              {canLog ? (
+                <DropdownMenuItem onSelect={() => onTimerRequest(null)}>
+                  <Play className="h-3.5 w-3.5" />
+                  Start timer
+                </DropdownMenuItem>
+              ) : null}
               <DropdownMenuItem onSelect={onAddCardSubtaskRequest}>
                 <CornerDownRight className="h-3.5 w-3.5" />
                 Add subtask
@@ -212,6 +229,23 @@ export function BoardCard({
                 >
                   {node.title}
                 </button>
+                {running?.subtaskId === node.id ? (
+                  <span
+                    aria-label={running.pausedAt ? "Timer paused" : "Timer running"}
+                    className={cn(
+                      "h-1.5 w-1.5 shrink-0 rounded-full",
+                      running.pausedAt ? "bg-warning" : "animate-pulse bg-success",
+                    )}
+                  />
+                ) : null}
+                {node.assignee ? (
+                  <UserAvatar
+                    name={node.assignee.name}
+                    image={node.assignee.image}
+                    className="ml-auto size-4 shrink-0"
+                    textClassName="text-[8px]"
+                  />
+                ) : null}
                 {canManage ? (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -220,12 +254,21 @@ export function BoardCard({
                         size="icon"
                         draggable={false}
                         aria-label={`Actions for ${node.title}`}
-                        className="ml-auto h-5 w-5 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100"
+                        className={cn(
+                          "h-5 w-5 shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/row:opacity-100 data-[state=open]:opacity-100",
+                          !node.assignee && "ml-auto",
+                        )}
                       >
                         <MoreHorizontal className="h-3 w-3" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-36">
+                      {canLog ? (
+                        <DropdownMenuItem onSelect={() => onTimerRequest(node)}>
+                          <Play className="h-3.5 w-3.5" />
+                          Start timer
+                        </DropdownMenuItem>
+                      ) : null}
                       <DropdownMenuItem onSelect={() => onEditSubtaskRequest(node)}>
                         <Pencil className="h-3.5 w-3.5" />
                         Edit

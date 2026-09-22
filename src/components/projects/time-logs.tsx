@@ -50,7 +50,7 @@ export function TimeLogs({
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="max-w-full space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold leading-tight tracking-tight">Time Tracking</h1>

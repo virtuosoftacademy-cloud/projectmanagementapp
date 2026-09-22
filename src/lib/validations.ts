@@ -105,6 +105,26 @@ export const createUserSchema = z
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 
+/**
+ * Editing an existing account.
+ *
+ * Deliberately the same profile fields as creation, minus the password (which
+ * has its own flow) and minus the role and active flag, which have their own
+ * controls on the Users table and their own last-admin guards.
+ */
+export const updateUserSchema = z.object({
+  userId: z.string().min(1),
+  name: nameSchema("Name"),
+  email: emailSchema,
+  phone: phoneSchema,
+  designation: z.string().trim().max(60).default(""),
+  /// Empty means "no team"; the action checks it belongs to this workspace.
+  teamId: z.string().trim().default(""),
+  monthlyHours: z.coerce.number().int().min(0).max(744, "That is more hours than a month has."),
+});
+
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
 /** The lighter invite used from the settings screen — no password required. */
 export const inviteMemberSchema = z.object({
   name: nameSchema("Name"),
@@ -169,8 +189,7 @@ export const setUserPagesSchema = z.object({
 export const addMemberSchema = z.object({
   userId: z.string().min(1, "Pick someone to add."),
   role: roleSchema,
-  /// Empty means "leave their team as it is" — see `addMemberAction`.
-  teamId: z.string().trim().default(""),
+  teamId: z.string().trim().min(1, "Pick a team."),
 });
 
 // ============================================================================
@@ -241,7 +260,6 @@ export const updateProjectSchema = z.object({
   teamId: z.string().trim().default(""),
   startDate: isoDateSchema,
   endDate: isoDateSchema,
-  defaultBillable: z.boolean(),
 });
 
 export const addProjectMembersSchema = z.object({
@@ -267,7 +285,6 @@ export const createTaskSchema = z.object({
   priority: z.enum(PRIORITIES as [string, ...string[]]),
   assigneeIds: z.array(z.string().min(1)).default([]),
   estimateHours: z.coerce.number().min(0).max(10_000),
-  billable: z.boolean(),
   dueDate: isoDateSchema,
 });
 
@@ -292,7 +309,6 @@ export const updateTaskSchema = z.object({
   assigneeIds: z.array(z.string().min(1)).default([]),
   labelIds: z.array(z.string().min(1)).default([]),
   estimateHours: z.coerce.number().min(0).max(10_000),
-  billable: z.boolean(),
   dueDate: isoDateSchema,
 });
 
@@ -319,6 +335,8 @@ export const createSubtaskSchema = z.object({
   parentId: z.string().min(1).nullable().default(null),
   title: z.string().trim().min(1, "Give the subtask a title.").max(200),
   description: z.string().trim().max(5000).default(""),
+  /** Empty means nobody. */
+  assigneeId: z.string().trim().min(1, "Choose who this subtask is for."),
   estimateMinutes: subtaskEstimate.default(0),
 });
 
@@ -327,6 +345,8 @@ export const updateSubtaskSchema = z.object({
   subtaskId: z.string().min(1),
   title: z.string().trim().min(1, "Give the subtask a title.").max(200).optional(),
   description: z.string().trim().max(5000).optional(),
+  /** Absent leaves it alone; it can never be cleared. */
+  assigneeId: z.string().trim().min(1, "Choose who this subtask is for.").optional(),
   status: z.enum(TASK_STATUS_VALUES as [string, ...string[]]).optional(),
   estimateMinutes: subtaskEstimate.optional(),
 });

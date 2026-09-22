@@ -38,9 +38,7 @@ export default async function TeamMembersPage() {
     canInvite ? getAddableUsers(viewer.workspaceId) : Promise.resolve([]),
   ]);
   const active = members.filter((member) => member.active).length;
-  const privileged = members.filter(
-    (member) => member.role === "owner" || member.role === "admin",
-  ).length;
+  const privileged = members.filter((member) => member.role === "admin").length;
 
   return (
     <div className="space-y-6">
@@ -108,6 +106,7 @@ export default async function TeamMembersPage() {
         customRoles={[]}
         canManageRoles={false}
         canDelete={false}
+        linkNames
         currentUserId={viewer.id}
       />
     </div>

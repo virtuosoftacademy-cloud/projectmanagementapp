@@ -11,6 +11,7 @@ import {
   FolderKanban,
   Pencil,
   Plus,
+  Search,
   Trash2,
   TrendingUp,
   Users,
@@ -19,6 +20,7 @@ import { AvatarStack } from "@/components/avatar-stack";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -77,6 +79,18 @@ export function TeamsGrid({
   const [editing, setEditing] = useState<TeamCard | null>(null);
   const [removing, setRemoving] = useState<TeamCard | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const visible = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return teams;
+    return teams.filter(
+      (team) =>
+        team.name.toLowerCase().includes(term) ||
+        team.code.toLowerCase().includes(term) ||
+        (team.description ?? "").toLowerCase().includes(term),
+    );
+  }, [teams, search]);
 
   const avgProgress = teams.length
     ? Math.round(teams.reduce((sum, team) => sum + team.progress, 0) / teams.length)
@@ -151,8 +165,31 @@ export function TeamsGrid({
         </p>
       ) : null}
 
+      {teams.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-52 flex-1">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 text-muted-foreground"
+            />
+            <Input
+              value={search}
+              aria-label="Search teams"
+              placeholder="Search teams…"
+              className="h-9 pl-8"
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          {/* <span className="text-xs text-muted-foreground">
+            {visible.length === teams.length
+              ? `${teams.length} team${teams.length === 1 ? "" : "s"}`
+              : `${visible.length} of ${teams.length}`}
+          </span> */}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {teams.map((team) => (
+        {visible.map((team) => (
           <Card
             key={team.id}
             className="shadow-none transition-all hover:border-primary/40 hover:shadow-sm"
@@ -164,7 +201,14 @@ export function TeamsGrid({
                     className="h-3 w-3 shrink-0 rounded-full"
                     style={{ backgroundColor: team.color }}
                   />
-                  <h2 className="truncate text-sm font-medium">{team.name}</h2>
+                  <h2 className="min-w-0 truncate text-sm font-medium">
+                    <Link
+                      href={`/admin/teams/${team.id}`}
+                      className="hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {team.name}
+                    </Link>
+                  </h2>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <Badge variant="secondary" className="gap-1">
@@ -218,7 +262,7 @@ export function TeamsGrid({
               <div className="flex items-center justify-between border-t pt-2">
                 <AvatarStack people={team.members} />
                 <Link
-                  href="/admin/users"
+                  href={`/admin/teams/${team.id}`}
                   className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
                 >
                   View
@@ -229,6 +273,26 @@ export function TeamsGrid({
           </Card>
         ))}
       </div>
+
+      {teams.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-10 text-center">
+          <Building2 aria-hidden className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-3 text-sm font-medium">No teams yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            A team groups people and owns projects, and is what the reports break work down by.
+          </p>
+          {canManage ? (
+            <Button className="mt-4" onClick={() => setCreating(true)} disabled={pending}>
+              <Plus className="h-4 w-4" />
+              New Team
+            </Button>
+          ) : null}
+        </div>
+      ) : visible.length === 0 ? (
+        <p className="rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
+          No team matches that search.
+        </p>
+      ) : null}
 
       <TeamDialog
         open={creating}
@@ -448,11 +512,9 @@ function TeamDialog({
                   key={member.id}
                   className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-muted/50"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={draft.memberIds.includes(member.id)}
-                    onChange={() => toggleMember(member.id)}
-                    className="h-4 w-4 accent-[hsl(var(--primary))]"
+                    onCheckedChange={() => toggleMember(member.id)}
                   />
                   <Avatar name={member.name} />
                   <span className="min-w-0 flex-1">

@@ -2,11 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Play, Square, Trash2 } from "lucide-react";
+import { Pause, Play, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormDialog } from "@/components/ui/form-dialog";
 import { useElapsed } from "@/hooks/use-elapsed";
 import { formatClock } from "@/lib/duration";
-import { discardTimerAction, startTimerAction, stopTimerAction } from "@/lib/task-actions";
+import {
+  discardTimerAction,
+  pauseTimerAction,
+  resumeTimerAction,
+  startTimerAction,
+  stopTimerAction,
+} from "@/lib/task-actions";
 import type { RunningTimer } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -25,12 +32,17 @@ import { cn } from "@/lib/utils";
 export function TimerControls({
   taskId,
   taskTitle,
+  subtaskId = null,
+  subtaskTitle = null,
   running,
   canLog,
   className,
 }: {
   taskId: string;
   taskTitle: string;
+  /** Time one subtask of the task instead of the task as a whole. */
+  subtaskId?: string | null;
+  subtaskTitle?: string | null;
   /** The viewer's running timer, on this task or another. */
   running: RunningTimer | null;
   /** `time.log`. Without it the controls are not rendered at all. */
@@ -41,8 +53,14 @@ export function TimerControls({
   const [pending, startTransition] = useTransition();
   const [notice, setNotice] = useState<string | null>(null);
 
-  const isThisTask = running?.taskId === taskId;
-  const elapsed = useElapsed(isThisTask ? running.startedAt : null);
+  // For a subtask, only a timer on that subtask is "this one"; for the task,
+  // any timer running on it is.
+  const isThisTask =
+    running !== null &&
+    (subtaskId ? running.subtaskId === subtaskId : running.taskId === taskId);
+  const target = subtaskTitle ?? taskTitle;
+  const elapsed = useElapsed(isThisTask ? running.startedAt : null, running?.pausedAt ?? null);
+  const paused = Boolean(isThisTask && running?.pausedAt);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, done?: string) {
     setNotice(null);
@@ -71,17 +89,47 @@ export function TimerControls({
             >
               {formatClock(elapsed)}
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-success">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-              </span>
-              Running
+            <span
+              className={cn(
+                "flex items-center gap-1.5 text-xs",
+                paused ? "text-warning" : "text-success",
+              )}
+            >
+              {paused ? (
+                <Pause className="h-3 w-3" aria-hidden />
+              ) : (
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+                </span>
+              )}
+              {paused ? "Paused" : "Running"}
               {running.subtaskTitle ? (
                 <span className="text-muted-foreground">on {running.subtaskTitle}</span>
               ) : null}
             </span>
 
+            {paused ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => run(resumeTimerAction, "Timer resumed.")}
+              >
+                <Play className="h-4 w-4" />
+                Resume
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => run(pauseTimerAction, "Timer paused.")}
+              >
+                <Pause className="h-4 w-4" />
+                Pause
+              </Button>
+            )}
             <Button size="sm" disabled={pending} onClick={() => run(stopTimerAction, "Timer stopped and logged.")}>
               <Square className="h-4 w-4" />
               {pending ? "Stopping…" : "Stop"}
@@ -102,8 +150,8 @@ export function TimerControls({
             disabled={pending}
             onClick={() =>
               run(
-                () => startTimerAction({ taskId, note: "" }),
-                running ? `Stopped ${running.taskTitle} and started ${taskTitle}.` : "Timer started.",
+                () => startTimerAction({ taskId, subtaskId, note: "" }),
+                running ? `Stopped ${running.subtaskTitle ?? running.taskTitle} and started ${target}.` : "Timer started.",
               )
             }
           >
@@ -115,16 +163,58 @@ export function TimerControls({
 
       {running && !isThisTask ? (
         <p className="text-xs text-muted-foreground">
-          Timing <span className="font-medium">{running.taskTitle}</span> — starting here stops
-          that one and saves it.
+          Timing <span className="font-medium">{running.subtaskTitle ?? running.taskTitle}</span> —
+          starting here stops that one and saves it.
         </p>
       ) : null}
 
       {/* The live region is what a screen reader gets instead of the ticking
           clock: one announcement per state change, not one per second. */}
       <p role="status" aria-live="polite" className="text-xs text-muted-foreground">
-        {notice ?? (isThisTask ? "Timer running." : "")}
+        {notice ?? (isThisTask ? (paused ? "Timer paused." : "Timer running.") : "")}
       </p>
     </div>
+  );
+}
+
+/**
+ * The timer for one task or subtask, in a dialog — what "Start timer" opens
+ * from a board card or a subtask. Starting is still a deliberate click inside
+ * it, so the dialog can first say what a timer running elsewhere would lose.
+ */
+export function TimerDialog({
+  open,
+  onClose,
+  taskId,
+  taskTitle,
+  subtaskId = null,
+  subtaskTitle = null,
+  running,
+}: {
+  open: boolean;
+  onClose: () => void;
+  taskId: string;
+  taskTitle: string;
+  subtaskId?: string | null;
+  subtaskTitle?: string | null;
+  running: RunningTimer | null;
+}) {
+  return (
+    <FormDialog
+      open={open}
+      onClose={onClose}
+      title={subtaskTitle ?? taskTitle}
+      description={subtaskTitle ? `Subtask of ${taskTitle}` : "Track time on this task."}
+    >
+      <TimerControls
+        className="py-2"
+        taskId={taskId}
+        taskTitle={taskTitle}
+        subtaskId={subtaskId}
+        subtaskTitle={subtaskTitle}
+        running={running}
+        canLog
+      />
+    </FormDialog>
   );
 }

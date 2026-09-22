@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && npm run db:sync && npm run db:seed",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
@@ -13,7 +13,7 @@
     "db:reset": "prisma migrate reset --force",
     "db:deploy": "prisma migrate deploy",
     "db:push": "prisma db push",
-    "db:sync": "prisma migrate dev || echo \"[build] migrate deploy skipped - database unreachable, schema NOT synced\"",
+    "db:sync": "prisma migrate deploy || echo \"[build] migrate deploy skipped - database unreachable, schema NOT synced\"",
     "db:seed": "tsx prisma/seed.ts"
   },
   "prisma": {

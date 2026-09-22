@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Clock, Download, ListTodo, Users, Wallet } from "lucide-react";
+import { ArrowLeft, Clock, ListTodo, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { formatDay } from "@/lib/domain";
+import { ExportReportButton } from "@/components/dashboard/export-report-button";
+import { formatDay, todayIso } from "@/lib/domain";
 import { getMembers, getProject, getProjectStats } from "@/lib/queries";
 import { getSessionUser, requirePermission } from "@/lib/session";
 import { statusVariant, taskStatusColor } from "@/lib/status";
-import { cn, formatDuration, formatPkr } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 export async function generateMetadata({
   params,
@@ -39,7 +39,6 @@ export default async function ReportPage({
 
   const performance = project.members.map((person) => {
     const member = members.find((item) => item.id === person.id);
-    const rate = member?.hourlyRate ?? 0;
     const entries = projectEntries.filter((entry) => entry.userId === person.id);
     return {
       member: { name: person.name, role: member?.role ?? "member" },
@@ -47,9 +46,6 @@ export default async function ReportPage({
         task.assignees.some((assignee) => assignee.id === person.id),
       ).length,
       hours: entries.reduce((sum, entry) => sum + entry.hours, 0),
-      cost: entries
-        .filter((entry) => entry.billable)
-        .reduce((sum, entry) => sum + entry.hours * rate, 0),
     };
   });
 
@@ -58,8 +54,44 @@ export default async function ReportPage({
       .filter((entry) => entry.taskId === taskId)
       .reduce((sum, entry) => sum + entry.hours, 0);
 
+  /** The CSV behind "Export to CSV": the same figures this page shows. */
+  const reportRows: string[][] = [
+    ["Project", project.name],
+    ["Status", project.status],
+    ["Generated", todayIso()],
+    [],
+    ["Summary"],
+    ["Tasks", String(stats.taskCount)],
+    ["Tasks done", String(stats.done)],
+    ["Progress %", String(stats.progress)],
+    ["Hours logged", String(stats.hours)],
+    ["Hours estimated", String(stats.estimateHours)],
+    ["Members", String(project.members.length)],
+    [],
+    ["Status", "Tasks", "Share %"],
+    ...stats.byStatus.map((row) => [row.label, String(row.count), String(row.percent)]),
+    [],
+    ["Member", "Role", "Tasks", "Hours"],
+    ...performance.map((row) => [
+      row.member.name,
+      row.member.role,
+      String(row.taskCount),
+      String(row.hours),
+    ]),
+    [],
+    ["Task", "Status", "Priority", "Due", "Estimate (h)", "Logged (h)"],
+    ...stats.tasks.map((task) => [
+      task.title,
+      task.status,
+      task.priority,
+      task.dueDate ?? "",
+      String(task.estimateHours),
+      String(loggedByTask(task.id)),
+    ]),
+  ];
+
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="max-w-full space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link
@@ -79,13 +111,15 @@ export default async function ReportPage({
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{project.description}</p>
         </div>
-        <Button variant="outline" size="sm">
-          <Download className="h-4 w-4" />
-          Export to Excel
-        </Button>
+        <ExportReportButton
+          rows={reportRows}
+          name={`${project.name} report`}
+          today={todayIso()}
+          label="Export to CSV"
+        />
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         <Card className="shadow-none">
           <CardContent className="p-4">
             <Label icon={<ListTodo className="h-4 w-4" />}>Tasks</Label>
@@ -105,13 +139,6 @@ export default async function ReportPage({
             <p className="mt-1 text-xs text-muted-foreground">
               of {stats.estimateHours}h estimated
             </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-none">
-          <CardContent className="p-4">
-            <Label icon={<Wallet className="h-4 w-4" />}>Cost (PKR)</Label>
-            <p className="mt-1 font-mono text-2xl font-bold">{formatPkr(stats.billableCost)}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{stats.billableHours}h billable</p>
           </CardContent>
         </Card>
         <Card className="shadow-none">
@@ -154,7 +181,7 @@ export default async function ReportPage({
         </CardHeader>
         <CardContent>
           <Table
-            head={["Name", "Role", "Tasks", "Hours", "Cost (PKR)"]}
+            head={["Name", "Role", "Tasks", "Hours"]}
             rows={performance.map((row) => [
               row.member.name,
               <span key="role" className="capitalize">
@@ -162,7 +189,6 @@ export default async function ReportPage({
               </span>,
               row.taskCount.toString(),
               formatDuration(row.hours),
-              row.cost ? formatPkr(row.cost) : "—",
             ])}
           />
         </CardContent>

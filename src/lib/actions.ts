@@ -120,11 +120,34 @@ export async function updateProjectAction(input: unknown): Promise<ActionResult>
       teamId: data.teamId || null,
       startDate: isoToDate(data.startDate),
       endDate: isoToDate(data.endDate),
-      defaultBillable: data.defaultBillable,
     },
   });
 
   refreshProject(data.id);
+  revalidatePath("/projects/settings");
+  return { ok: true };
+}
+
+/**
+ * Delete a project and everything inside it.
+ *
+ * Cascades to its boards, tasks, subtasks, time entries, sheets and campaigns,
+ * so the caller is told the counts before confirming — the figures come back
+ * with the refusal-free path rather than being guessed in the dialog.
+ */
+export async function deleteProjectAction(projectId: string): Promise<ActionResult> {
+  const user = await requirePermission("projects.delete");
+
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId: user.workspaceId },
+    select: { id: true, name: true },
+  });
+  if (!project) return NOT_FOUND;
+
+  await prisma.project.delete({ where: { id: project.id } });
+
+  revalidatePath("/projects", "layout");
+  revalidatePath("/dashboard");
   revalidatePath("/projects/settings");
   return { ok: true };
 }
@@ -214,7 +237,6 @@ export async function createTaskAction(input: unknown): Promise<ActionResult & {
       status: taskStatusToDb[data.status as TaskStatus],
       priority: priorityToDb[data.priority as Priority],
       estimateMinutes: hoursToMinutes(data.estimateHours),
-      billable: data.billable,
       dueDate: isoToDate(data.dueDate),
       position: (last?.position ?? -1) + 1,
       assignees: { create: data.assigneeIds.map((userId) => ({ userId })) },
@@ -281,7 +303,7 @@ export async function logTimeAction(input: unknown): Promise<ActionResult> {
 
   const task = await prisma.task.findFirst({
     where: { id: data.taskId, project: { workspaceId: user.workspaceId } },
-    select: { billable: true, projectId: true },
+    select: { projectId: true },
   });
   if (!task) return { ok: false, error: "That task no longer exists." };
 
@@ -291,7 +313,6 @@ export async function logTimeAction(input: unknown): Promise<ActionResult> {
       userId: user.id,
       date: isoToDate(data.date) ?? new Date(),
       minutes: data.minutes,
-      billable: task.billable,
       note: data.note,
     },
   });

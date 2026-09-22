@@ -21,13 +21,13 @@ function refresh() {
   revalidatePath("/admin/users");
 }
 
-async function activeOwnerCount(workspaceId: string) {
+async function activeAdminCount(workspaceId: string) {
   return prisma.workspaceMember.count({
-    where: { workspaceId, role: "OWNER", user: { disabledAt: null } },
+    where: { workspaceId, role: "ADMIN", user: { disabledAt: null } },
   });
 }
 
-/** Change a member's role in this workspace. Owner-only, and the last owner cannot be demoted. */
+/** Change a member's role in this workspace. Admins only, and the last admin cannot be demoted. */
 export async function updateRoleAction(formData: FormData): Promise<ActionResult> {
   const actor = await requirePermission("roles.manage");
 
@@ -42,25 +42,16 @@ export async function updateRoleAction(formData: FormData): Promise<ActionResult
   });
   if (!membership) return { ok: false, error: "That member no longer exists." };
 
-  // Same guard as `setUserRoleAction`. `roles.manage` is owner *and* admin, so
-  // without this an admin could grant themselves the owner role and pick up
-  // account deletion with it.
+  // Same guard as `setUserRoleAction`: changing your own role is how someone
+  // locks themselves out of the screen they are standing on.
   if (parsed.data.userId === actor.id) {
     return { ok: false, error: "You cannot change your own role." };
   }
-  if (actor.role !== "owner") {
-    if (parsed.data.role === "owner") {
-      return { ok: false, error: "Only an owner can grant the owner role." };
-    }
-    if (membership.role === "OWNER") {
-      return { ok: false, error: "Only an owner can change another owner's role." };
-    }
-  }
 
-  if (membership.role === "OWNER" && parsed.data.role !== "owner") {
-    const owners = await activeOwnerCount(actor.workspaceId);
-    if (owners <= 1) {
-      return { ok: false, error: "The workspace must keep at least one owner." };
+  if (membership.role === "ADMIN" && parsed.data.role !== "admin") {
+    const admins = await activeAdminCount(actor.workspaceId);
+    if (admins <= 1) {
+      return { ok: false, error: "The workspace must keep at least one admin." };
     }
   }
 

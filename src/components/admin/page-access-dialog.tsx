@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CircleAlert } from "lucide-react";
 import { setUserPagesAction } from "@/app/(app)/admin/users/actions";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { DialogActions } from "@/components/ui/form-actions";
 import type { Role } from "@/lib/domain";
@@ -114,11 +115,9 @@ export function PageAccessDialog({
               key={page.key}
               className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-muted/50"
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={selected.includes(page.key)}
-                onChange={() => toggle(page.key)}
-                className="h-4 w-4 accent-[hsl(var(--primary))]"
+                onCheckedChange={() => toggle(page.key)}
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{page.label}</span>

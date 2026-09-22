@@ -27,7 +27,7 @@ export default async function AdminUsersPage() {
   ]);
 
   const canInvite = can(viewer.role, "members.invite");
-  const privileged = stats.byRole.owner + stats.byRole.admin;
+  const privileged = stats.byRole.admin;
 
   return (
     <div className="space-y-6">

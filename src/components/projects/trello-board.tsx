@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   CircleAlert,
@@ -8,10 +8,13 @@ import {
   Pencil,
   Plus,
   Trash2,
-  X,
 } from "lucide-react";
 import { BoardCard } from "@/components/projects/board-card";
-import { TaskEditDialog } from "@/components/projects/task-edit-dialog";
+import {
+  TaskEditDialog,
+  type TaskFormValues,
+} from "@/components/projects/task-edit-dialog";
+import { TimerDialog } from "@/components/projects/timer-controls";
 import { deleteTaskAction } from "@/lib/actions";
 import { updateTaskAction } from "@/lib/task-actions";
 import {
@@ -36,19 +39,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { FilePicker } from "@/components/ui/file-picker";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  ACCEPT_ATTRIBUTE,
-  ATTACHMENT_ACCEPT,
-  MAX_SIZE,
-  formatBytes,
-  validateAttachmentFile,
-  validateImageFile,
-} from "@/lib/r2";
 import {
   deleteSubtaskAction,
+  pauseTimerAction,
+  resumeTimerAction,
   setTaskCoverAction,
+  startTimerAction,
+  stopTimerAction,
   uploadTaskFileAction,
 } from "@/lib/task-actions";
 import {
@@ -121,6 +118,7 @@ type Dialog =
   | { kind: "open-subtask"; subtask: Subtask }
   | { kind: "edit-subtask"; subtask: Subtask }
   | { kind: "delete-subtask"; subtask: Subtask }
+  | { kind: "timer"; task: Task; subtask: Subtask | null }
   | null;
 
 /**
@@ -181,13 +179,17 @@ export function TrelloBoard({
   const [dragging, setDragging] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ listId: string; visibleIndex: number } | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
-  const [draft, setDraft] = useState<CardDraft>(EMPTY_CARD);
 
   const subtasksByTask = useMemo(() => {
     const map = new Map<string, Subtask[]>();
     for (const item of subtasks) map.set(item.taskId, [...(map.get(item.taskId) ?? []), item]);
     return map;
   }, [subtasks]);
+
+  /** The people on a task — who its subtasks can be assigned to. */
+  function assigneesOf(taskId: string) {
+    return tasks.find((task) => task.id === taskId)?.assignees ?? [];
+  }
 
   /** Deleting a card takes its time entries with it, so the dialog says so. */
   function describeCardRemoval(task: Task | undefined) {
@@ -295,39 +297,76 @@ export function TrelloBoard({
     return index === -1 ? cards.length : index;
   }
 
-  function submitCard(list: BoardList) {
-    const title = draft.title.trim();
+  /**
+   * A timer write, which leaves any open dialog alone — pausing from the
+   * subtask dialog should show the clock stop, not shut the dialog.
+   */
+  function runTimer(action: () => Promise<{ ok: boolean; error?: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) {
+        setError(result.error ?? "That did not work.");
+        return;
+      }
+      router.refresh();
+    });
+  }
+
+  function startTimer(taskId: string, subtaskId: string | null) {
+    runTimer(() => startTimerAction({ taskId, subtaskId, note: "" }));
+  }
+
+  function stopTimer() {
+    runTimer(stopTimerAction);
+  }
+
+  function pauseTimer() {
+    runTimer(pauseTimerAction);
+  }
+
+  function resumeTimer() {
+    runTimer(resumeTimerAction);
+  }
+
+  /**
+   * Add a card from the same form that edits one: create it, apply the rest of
+   * the fields, then upload its cover and file — one request each, because a
+   * single file may use the whole action body limit.
+   */
+  function submitCard(list: BoardList, values: TaskFormValues) {
+    const title = values.title.trim();
     if (!title) return;
     setError(null);
     startTransition(async () => {
-      const result = await addCardAction({
+      const created = await addCardAction({
         listId: list.id,
         title,
-        description: draft.description.trim(),
+        description: values.description.trim(),
       });
-      if (!result.ok || !result.id) {
-        setError(result.error ?? "Could not add that card.");
+      if (!created.ok || !created.id) {
+        setError(created.error ?? "Could not add that card.");
         return;
       }
 
-      // One upload per request: each file may use the whole body limit.
+      const updated = await updateTaskAction({ ...values, title, taskId: created.id });
+      if (!updated.ok) setError(updated.error ?? "The card was added with its title only.");
+
       const problems: string[] = [];
       for (const [upload, chosen] of [
-        [setTaskCoverAction, draft.cover],
-        [uploadTaskFileAction, draft.file],
+        [setTaskCoverAction, values.cover],
+        [uploadTaskFileAction, values.file],
       ] as const) {
         if (!chosen) continue;
         const form = new FormData();
-        form.set("taskId", result.id);
+        form.set("taskId", created.id);
         form.set("file", chosen);
         const uploaded = await upload(form);
         if (!uploaded.ok) problems.push(`${chosen.name}: ${uploaded.error ?? "upload failed."}`);
       }
       if (problems.length) setError(`Card added, but ${problems.join(" ")}`);
 
-      // Stays open for the next card, as Trello's does — cards are usually
-      // added several at a time.
-      setDraft(EMPTY_CARD);
+      setAdding(null);
       router.refresh();
     });
   }
@@ -337,6 +376,7 @@ export function TrelloBoard({
   }
 
   const moving = dialog?.kind === "move-card" ? dialog.task : null;
+  const addingTo = adding ? lists.find((list) => list.id === adding) : undefined;
   const subtasksTask =
     dialog?.kind === "subtasks" ? tasks.find((task) => task.id === dialog.taskId) : undefined;
   return (
@@ -473,6 +513,9 @@ export function TrelloBoard({
                         task={task}
                         subtasks={subtasksByTask.get(task.id) ?? []}
                         today={today}
+                        canLog={canLog}
+                        running={running}
+                        onTimerRequest={(subtask) => setDialog({ kind: "timer", task, subtask })}
                         canManage={canManage}
                         dragging={dragging === task.id}
                         onDragStart={(event) => {
@@ -514,31 +557,15 @@ export function TrelloBoard({
 
               {canManage ? (
                 <div className="px-2 pb-2">
-                  {adding === list.id ? (
-                    <AddCardForm
-                      value={draft}
-                      pending={pending}
-                      onChange={setDraft}
-                      onSubmit={() => submitCard(list)}
-                      onCancel={() => {
-                        setAdding(null);
-                        setDraft(EMPTY_CARD);
-                      }}
-                    />
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start text-muted-foreground"
-                      onClick={() => {
-                        setAdding(list.id);
-                        setDraft(EMPTY_CARD);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add a card
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start text-muted-foreground"
+                    onClick={() => setAdding(list.id)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add a card
+                  </Button>
                 </div>
               ) : null}
             </section>
@@ -623,6 +650,7 @@ export function TrelloBoard({
         <AddSubtaskDialog
           key={dialog.parentId ?? dialog.taskId}
           parentTitle={dialog.parentTitle}
+          members={assigneesOf(dialog.taskId)}
           pending={pending}
           error={error}
           onClose={() => setDialog(null)}
@@ -645,7 +673,7 @@ export function TrelloBoard({
           pending={pending}
           error={error}
           onClose={() => setDialog(null)}
-          onSubmit={(values) => run(() => updateTaskAction(values))}
+          onSubmit={(values) => run(() => updateTaskAction({ ...values, taskId: dialog.task.id }))}
         />
       ) : null}
 
@@ -666,6 +694,13 @@ export function TrelloBoard({
           key={dialog.subtask.id}
           subtask={dialog.subtask}
           canManage={canManage}
+          canLog={canLog}
+          running={running}
+          pending={pending}
+          onStartTimer={() => startTimer(dialog.subtask.taskId, dialog.subtask.id)}
+          onStopTimer={stopTimer}
+          onPauseTimer={pauseTimer}
+          onResumeTimer={resumeTimer}
           onClose={() => setDialog(null)}
           onEdit={() => setDialog({ kind: "edit-subtask", subtask: dialog.subtask })}
           onDelete={() => setDialog({ kind: "delete-subtask", subtask: dialog.subtask })}
@@ -684,6 +719,7 @@ export function TrelloBoard({
         <EditSubtaskDialog
           key={dialog.subtask.id}
           subtask={dialog.subtask}
+          members={assigneesOf(dialog.subtask.taskId)}
           pending={pending}
           error={error}
           onClose={() => setDialog(null)}
@@ -703,6 +739,33 @@ export function TrelloBoard({
         description={dialog?.kind === "delete-subtask" ? describeSubtaskRemoval(dialog.subtask) : ""}
       />
 
+      {addingTo ? (
+        <TaskEditDialog
+          key={addingTo.id}
+          open
+          defaultStatus={addingTo.status}
+          members={members}
+          labels={labels}
+          pending={pending}
+          error={error}
+          onClose={() => setAdding(null)}
+          onSubmit={(values) => submitCard(addingTo, values)}
+        />
+      ) : null}
+
+      {dialog?.kind === "timer" ? (
+        <TimerDialog
+          key={dialog.subtask?.id ?? dialog.task.id}
+          open
+          onClose={() => setDialog(null)}
+          taskId={dialog.task.id}
+          taskTitle={dialog.task.title}
+          subtaskId={dialog.subtask?.id ?? null}
+          subtaskTitle={dialog.subtask?.title ?? null}
+          running={running}
+        />
+      ) : null}
+
       {/* A drag is announced by its outcome, not by every hover. */}
       <p role="status" aria-live="polite" className="sr-only">
         {pending ? "Saving…" : ""}
@@ -715,92 +778,3 @@ function DropLine() {
   return <div aria-hidden className="mb-2 h-1 rounded-full bg-primary" />;
 }
 
-type CardDraft = { title: string; description: string; cover: File | null; file: File | null };
-
-const EMPTY_CARD: CardDraft = { title: "", description: "", cover: null, file: null };
-
-function AddCardForm({
-  value,
-  pending,
-  onChange,
-  onSubmit,
-  onCancel,
-}: {
-  value: CardDraft;
-  pending: boolean;
-  onChange: (value: CardDraft) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const set = <K extends keyof CardDraft>(key: K, next: CardDraft[K]) =>
-    onChange({ ...value, [key]: next });
-
-  return (
-    <form
-      className="space-y-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-        ref.current?.focus();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onCancel();
-      }}
-    >
-      <Textarea
-        ref={ref}
-        autoFocus
-        rows={2}
-        value={value.title}
-        maxLength={200}
-        placeholder="Enter a title for this card…"
-        aria-label="Card title"
-        className="resize-none bg-card text-sm"
-        onChange={(event) => set("title", event.target.value)}
-        onKeyDown={(event) => {
-          // Enter adds, as in Trello; Shift+Enter is a line break.
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            event.currentTarget.form?.requestSubmit();
-          }
-        }}
-      />
-      <Textarea
-        rows={2}
-        value={value.description}
-        maxLength={5000}
-        disabled={pending}
-        placeholder="Description (optional)"
-        aria-label="Card description"
-        className="resize-none bg-card text-sm"
-        onChange={(event) => set("description", event.target.value)}
-      />
-      <FilePicker
-        value={value.cover}
-        onChange={(file) => set("cover", file)}
-        accept={ACCEPT_ATTRIBUTE}
-        validate={validateImageFile}
-        disabled={pending}
-        buttonLabel="Cover image"
-      />
-      <FilePicker
-        value={value.file}
-        onChange={(file) => set("file", file)}
-        accept={ATTACHMENT_ACCEPT}
-        validate={validateAttachmentFile}
-        disabled={pending}
-        buttonLabel="Attach file"
-        hint={"Up to " + formatBytes(MAX_SIZE) + ". Images, PDF, Office, TXT or CSV."}
-      />
-      <div className="flex items-center gap-1">
-        <Button type="submit" size="sm" disabled={pending || !value.title.trim()}>
-          {pending ? "Adding…" : "Add card"}
-        </Button>
-        <Button type="button" variant="ghost" size="icon" aria-label="Cancel" onClick={onCancel}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
-    </form>
-  );
-}

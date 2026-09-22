@@ -10,6 +10,7 @@ import {
 } from "@/app/(app)/admin/users/roles/actions";
 import type { CustomRoleRow } from "@/lib/admin";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Field } from "@/components/ui/field";
 import { FormDialog } from "@/components/ui/form-dialog";
@@ -183,7 +184,7 @@ export function RoleDialog({
         </Field>
 
         <fieldset>
-          <div className="mb-1.5 flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <legend className="text-sm font-medium leading-none">
               Permissions (<span className="font-mono">{selected.length}</span>/
               <span className="font-mono">{grantable.length}</span>)
@@ -211,10 +212,9 @@ export function RoleDialog({
                   key={permission}
                   className="flex cursor-pointer items-center gap-2 rounded-md p-1.5 text-sm hover:bg-muted/50"
                 >
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={selected.includes(permission)}
-                    onChange={() =>
+                    onCheckedChange={() =>
                       set(
                         "permissions",
                         selected.includes(permission)
@@ -222,7 +222,6 @@ export function RoleDialog({
                           : [...draft.permissions, permission],
                       )
                     }
-                    className="h-4 w-4 accent-[hsl(var(--primary))]"
                   />
                   {PERMISSION_LABELS[permission]}
                 </label>
@@ -318,11 +317,10 @@ export function RoleRowActions({ role }: { role: CustomRoleRow }) {
         title={`Delete ${role.label}?`}
         description={
           role.memberCount > 0
-            ? `${role.memberCount} ${
-                role.memberCount === 1 ? "person holds" : "people hold"
-              } this role. They keep their account and fall back to the ${roleLabel(
-                role.inheritsFrom,
-              )} role it inherits from, which may grant them more than this role did.`
+            ? `${role.memberCount} ${role.memberCount === 1 ? "person holds" : "people hold"
+            } this role. They keep their account and fall back to the ${roleLabel(
+              role.inheritsFrom,
+            )} role it inherits from, which may grant them more than this role did.`
             : "Nobody holds this role, so nothing else changes."
         }
       />

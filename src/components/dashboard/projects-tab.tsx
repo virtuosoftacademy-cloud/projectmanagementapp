@@ -5,11 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { Project } from "@/lib/domain";
 import { statusVariant } from "@/lib/status";
-import { formatPkr } from "@/lib/utils";
 
 export type ProjectRow = {
   project: Project;
-  stats: { done: number; taskCount: number; hours: number; cost: number; progress: number };
+  stats: { done: number; taskCount: number; hours: number; progress: number };
 };
 
 export function ProjectsTab({ rows }: { rows: ProjectRow[] }) {
@@ -45,7 +44,6 @@ export function ProjectsTab({ rows }: { rows: ProjectRow[] }) {
                     <div className="flex items-center gap-4 text-xs">
                       <Stat label="Tasks" value={`${stats.done}/${stats.taskCount}`} />
                       <Stat label="Hours" value={stats.hours.toString()} />
-                      <Stat label="Cost" value={formatPkr(stats.cost)} />
                       <Stat label="Members" value={project.members.length.toString()} />
                     </div>
                   </div>

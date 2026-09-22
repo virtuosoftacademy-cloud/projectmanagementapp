@@ -3,13 +3,19 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Play, Square, Trash2 } from "lucide-react";
+import { Pause, Play, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SelectField } from "@/components/ui/select-field";
 import { useElapsed } from "@/hooks/use-elapsed";
 import { formatClock, formatMinutes } from "@/lib/duration";
-import { discardTimerAction, startTimerAction, stopTimerAction } from "@/lib/task-actions";
+import {
+  discardTimerAction,
+  pauseTimerAction,
+  resumeTimerAction,
+  startTimerAction,
+  stopTimerAction,
+} from "@/lib/task-actions";
 import type { RunningTimer } from "@/lib/domain";
 
 /**
@@ -44,7 +50,8 @@ export function ActiveTimer({
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startSaving] = useTransition();
 
-  const elapsed = useElapsed(running?.startedAt ?? null);
+  const elapsed = useElapsed(running?.startedAt ?? null, running?.pausedAt ?? null);
+  const paused = Boolean(running?.pausedAt);
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>, done: string) {
     setNotice(null);
@@ -95,6 +102,27 @@ export function ActiveTimer({
         <div className="flex items-center justify-center gap-2">
           {running ? (
             <>
+              {paused ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => run(resumeTimerAction, "Resumed.")}
+                >
+                  <Play className="h-4 w-4" />
+                  Resume
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={pending}
+                  onClick={() => run(pauseTimerAction, "Paused.")}
+                >
+                  <Pause className="h-4 w-4" />
+                  Pause
+                </Button>
+              )}
               <Button
                 size="sm"
                 disabled={pending}
@@ -133,7 +161,8 @@ export function ActiveTimer({
         {/* The clock is aria-hidden — a per-second announcement is unusable —
             so state changes are announced here instead. */}
         <p role="status" aria-live="polite" className="text-center text-xs text-muted-foreground">
-          {notice ?? (running ? `Timing ${running.taskTitle}.` : "")}
+          {notice ??
+            (running ? `${paused ? "Paused on" : "Timing"} ${running.taskTitle}.` : "")}
         </p>
       </CardContent>
     </Card>

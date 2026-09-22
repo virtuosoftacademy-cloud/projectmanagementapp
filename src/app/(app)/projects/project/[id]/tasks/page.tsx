@@ -12,7 +12,6 @@ import {
   getRunningTimer,
   getTasks,
 } from "@/lib/queries";
-import { probe } from "@/lib/probe";
 import { getSessionUser, hasPermission, requireUser } from "@/lib/session";
 
 export async function generateMetadata({
@@ -40,12 +39,6 @@ export default async function ProjectTasksPage({
   const { board: requested } = await searchParams;
 
   const project = await getProject(viewer.workspaceId, id);
-  probe("tasks", {
-    id,
-    workspaceId: viewer.workspaceId,
-    found: Boolean(project),
-    features: project?.features,
-  });
   // A feature switched off is genuinely gone, not just hidden from the nav.
   if (!project || !project.features.includes("tasks")) notFound();
 

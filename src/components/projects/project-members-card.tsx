@@ -2,10 +2,12 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Users } from "lucide-react";
+import Link from "next/link";
+import { ChartNoAxesColumn, Plus, Users } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FormDialog } from "@/components/ui/form-dialog";
 import { DialogActions } from "@/components/ui/form-actions";
@@ -39,6 +41,7 @@ export function ProjectMembersCard({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState(false);
+  const [viewing, setViewing] = useState<ProjectMemberRow | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
 
   const available = candidates.filter(
@@ -101,20 +104,17 @@ export function ProjectMembersCard({
 
   return (
     <Card>
-      <CardHeader className="flex-row items-center justify-between space-y-0">
+      <div className="flex! flex-row items-center justify-between px-6">
         <CardTitle className="text-sm">Members</CardTitle>
-        {canEdit ? (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setAdding(true)}
-            disabled={available.length === 0 || pending}
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add member
-          </Button>
-        ) : null}
-      </CardHeader>
+        <div>
+          {canEdit ? (
+            <Button variant="ghost" size="xs" onClick={() => setAdding(true)} disabled={pending}>
+              <Plus className="h-3.5 w-3.5" />
+              Add member
+            </Button>
+          ) : null}
+        </div>
+      </div>
       <CardContent className="space-y-4">
         {groups.map((group) => (
           <div key={group.id || "unassigned"} className="space-y-1">
@@ -140,7 +140,14 @@ export function ProjectMembersCard({
                   textClassName="text-xs text-primary"
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{member.name}</p>
+                  <button
+                    type="button"
+                    className="block max-w-full truncate rounded text-left text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Analytics for ${member.name}`}
+                    onClick={() => setViewing({ member, tasksDone, tasksTotal, hours })}
+                  >
+                    {member.name}
+                  </button>
                   <p className="truncate text-xs text-muted-foreground">
                     <span className="capitalize">{member.role}</span> · {member.email}
                   </p>
@@ -161,6 +168,56 @@ export function ProjectMembersCard({
         ) : null}
       </CardContent>
 
+      {viewing ? (
+        <FormDialog
+          open
+          onClose={() => setViewing(null)}
+          title={viewing.member.name}
+          description={`${viewing.member.designation ?? viewing.member.role} · ${viewing.member.email}`}
+        >
+          <div className="grid gap-4 py-2">
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Tasks done</p>
+                <p className="mt-1 font-mono text-xl font-bold">
+                  {viewing.tasksDone}/{viewing.tasksTotal}
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Progress</p>
+                <p className="mt-1 font-mono text-xl font-bold">
+                  {viewing.tasksTotal
+                    ? Math.round((viewing.tasksDone / viewing.tasksTotal) * 100)
+                    : 0}
+                  %
+                </p>
+              </div>
+              <div className="rounded-md border p-3">
+                <p className="text-xs text-muted-foreground">Logged</p>
+                <p className="mt-1 font-mono text-xl font-bold">{viewing.hours.toFixed(1)}h</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Their work on this project. Team:{" "}
+              {viewing.member.teamId
+                ? (teamNameById.get(viewing.member.teamId) ?? "Other team")
+                : "No team"}
+              .
+            </p>
+
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/team-members/${viewing.member.id}`}>
+                  <ChartNoAxesColumn className="h-3.5 w-3.5" />
+                  Full analytics
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </FormDialog>
+      ) : null}
+
       <FormDialog
         open={adding}
         onClose={() => setAdding(false)}
@@ -180,17 +237,15 @@ export function ProjectMembersCard({
                 key={member.id}
                 className="flex cursor-pointer items-center gap-3 rounded-md p-1.5 hover:bg-muted/50"
               >
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={selected.includes(member.id)}
-                  onChange={() =>
+                  onCheckedChange={() =>
                     setSelected((current) =>
                       current.includes(member.id)
                         ? current.filter((id) => id !== member.id)
                         : [...current, member.id],
                     )
                   }
-                  className="h-4 w-4 accent-[hsl(var(--primary))]"
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm">{member.name}</span>

@@ -255,12 +255,12 @@ export function WorkspacesView({
                   )}
 
                   {/*
-                    Only an owner of *this* workspace. Never disabled — clicking
+                    Only an admin of *this* workspace. Never disabled — clicking
                     is how you learn what is blocking it, with exact numbers, in
                     the dialog. Styled to match Edit and Switch to: same variant
                     and size, so the row reads as one set of actions.
                   */}
-                  {workspace.role === "owner" ? (
+                  {workspace.role === "admin" ? (
                     <Button
                       variant="outline"
                       size="sm"
@@ -289,7 +289,7 @@ export function WorkspacesView({
         open={creating}
         onClose={() => setCreating(false)}
         title="New workspace"
-        description="You'll be its owner, and you'll be switched into it once it's created."
+        description="You'll be its admin, and you'll be switched into it once it's created."
       >
         <form
           className="grid gap-4 py-2"

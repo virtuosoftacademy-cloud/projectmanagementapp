@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { ProjectSettingsForm } from "@/components/projects/project-settings-form";
 import { getMembers, getProjects, getTeams } from "@/lib/queries";
-import { requirePermission } from "@/lib/session";
+import { requirePage, requirePermission } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Project Settings" };
 
 export default async function ProjectSettingsPage() {
+  // Part of Settings, so unassigning that page closes this too.
+  await requirePage("settings");
   const viewer = await requirePermission("workspace.settings");
   const [projects, members, teams] = await Promise.all([
     getProjects(viewer.workspaceId),

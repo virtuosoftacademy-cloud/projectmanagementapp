@@ -17,7 +17,6 @@ import {
 } from "recharts";
 import type { TaskStatus } from "@/lib/domain";
 import { taskStatusColor } from "@/lib/status";
-import { formatPkr } from "@/lib/utils";
 
 const axisProps = {
   stroke: "hsl(var(--muted-foreground))",
@@ -104,7 +103,7 @@ export function TaskDistributionChart({
 export function ProjectEffortChart({
   data,
 }: {
-  data: { name: string; hours: number; cost: number }[];
+  data: { name: string; hours: number }[];
 }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -121,11 +120,7 @@ export function ProjectEffortChart({
         <Tooltip
           contentStyle={tooltipStyle}
           cursor={{ fill: "hsl(var(--muted))", opacity: 0.4 }}
-          formatter={(value, name) =>
-            name === "Cost (PKR)"
-              ? [formatPkr(Number(value)), name]
-              : [`${Number(value)} h`, name]
-          }
+          formatter={(value, name) => [`${Number(value)} h`, name]}
         />
         <Legend
           iconType="circle"
@@ -136,7 +131,6 @@ export function ProjectEffortChart({
           )}
         />
         <Bar dataKey="hours" name="Hours" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="cost" name="Cost (PKR)" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

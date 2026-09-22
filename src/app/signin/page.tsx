@@ -36,10 +36,6 @@ export default async function SignInPage({ searchParams }: PageProps<"/signin">)
           </CardContent>
         </Card>
 
-        <p className="text-center text-xs text-muted-foreground">
-          Seeded demo accounts use the password from <code className="font-mono">SEED_PASSWORD</code>
-          .
-        </p>
       </div>
     </main>
   );

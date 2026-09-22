@@ -42,6 +42,14 @@ export interface NavItem {
   roles: Role[];
   /** Set on a project row, so the sidebar can offer its feature picker. */
   projectId?: string;
+  /**
+   * The assignable page this link belongs to, when its own href is not one.
+   *
+   * "Add Users" is part of Users, not a page in its own right — without this
+   * it would survive an admin unassigning Users, which is the one thing page
+   * assignment is supposed to decide.
+   */
+  page?: AppPage;
   children?: NavItem[];
 }
 
@@ -50,34 +58,12 @@ export interface NavSection {
   items: NavItem[];
 }
 
-const EVERYONE: Role[] = ["owner", "admin", "manager", "member", "viewer", "guest"];
-const ADMINS: Role[] = ["owner", "admin"];
-const REPORT_READERS: Role[] = ["owner", "admin", "manager", "member", "viewer"];
+const EVERYONE: Role[] = ["admin", "manager", "member", "viewer", "guest"];
+const ADMINS: Role[] = ["admin"];
+const REPORT_READERS: Role[] = ["admin", "manager", "member", "viewer"];
 /** Roles holding `time.log` — the people who can actually record hours. */
-const WORKERS: Role[] = ["owner", "admin", "manager", "member"];
+const WORKERS: Role[] = ["admin", "manager", "member"];
 
-/**
- * Static sections. Project entries are appended per request.
- *
- * Grouped by *who an entry is for*, which mirrors the permission matrix in
- * `lib/permissions.ts` rather than inventing a second idea of privilege:
- *
- *   Navigation     — the daily work surface: what you are doing and where your
- *                    hours went.
- *   Team Members   — the people side: the roster, talking to them, and the
- *                    teams they belong to.
- *   Administration — managing the workspace rather than working inside it:
- *                    accounts, roles and the workspaces themselves.
- *   Settings       — how the app behaves for *you*. No permission attaches to
- *                    either entry; the theme is stored per browser.
- *
- * Empty sections are dropped by `visibleSections`, so a member simply never
- * sees an Administration heading.
- *
- * Reachable only by URL, deliberately rather than by oversight: `/settings`
- * (workspace settings), `/projects/analytics`, and `/projects/time-tracking`
- * — the last because time is now reached per project or through Timesheet.
- */
 function baseSections(): NavSection[] {
   return [
     {
@@ -85,26 +71,14 @@ function baseSections(): NavSection[] {
       items: [
         { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: EVERYONE },
         { title: "All Projects", href: "/projects", icon: FolderKanban, roles: EVERYONE },
-        // The workspace-wide weekly grid — every project you are on, in one
-        // sheet. Time Tracking is still reachable per project; it is no longer
-        // duplicated as a workspace-level entry here.
-        {
-          title: "Timesheet",
-          href: "/projects/timesheet",
-          icon: Clock,
-          roles: WORKERS,
-        },
       ],
     },
     {
       title: "Team Members",
       items: [
-        // The roster of people in this workspace — everyone may see it.
-        { title: "Teams", href: "/team-members", icon: Users, roles: EVERYONE },
-        { title: "Messages", href: "/messages", icon: MessageSquare, roles: EVERYONE },
-        // Managing the teams themselves. Sits with the people group rather than
-        // under Administration, since that is what it is about.
+        { title: "Team Memebers", href: "/team-members", icon: Users, roles: ADMINS },
         { title: "All Teams", href: "/admin/teams", icon: UsersRound, roles: ADMINS },
+        { title: "Messages", href: "/messages", icon: MessageSquare, roles: EVERYONE },
       ],
     },
     {
@@ -112,15 +86,18 @@ function baseSections(): NavSection[] {
       items: [
         // The directory of *every* account, including people who are not in
         // this workspace yet, so an admin can find someone to add.
-        // `members.invite` is owner/admin, matching ADMINS.
+        // `members.invite` is admin-only, matching ADMINS.
         { title: "Users", href: "/admin/users", icon: UserCog, roles: ADMINS },
-        { title: "Add Users", href: "/admin/users/new", icon: UserPlus, roles: ADMINS },
+        {
+          title: "Add Users",
+          href: "/admin/users/new",
+          icon: UserPlus,
+          roles: ADMINS,
+          page: "users",
+        },
         { title: "Roles", href: "/admin/users/roles", icon: ShieldCheck, roles: ADMINS },
-        // ADMINS, not EVERYONE. As EVERYONE it was the only item a member could
-        // see here, so they got an "Administration" heading with one entry
-        // under it. Switching workspaces is still available to every role
-        // through the switcher at the top of the sidebar.
         { title: "Workspaces", href: "/workspaces", icon: Building2, roles: ADMINS },
+        {title: "Timesheet", href: "/projects/timesheet", icon: Clock, roles: ADMINS,},
       ],
     },
     {
@@ -131,7 +108,7 @@ function baseSections(): NavSection[] {
           title: "Display & Appearance",
           href: "/settings/appearance",
           icon: Palette,
-          roles: EVERYONE,
+          roles: ADMINS
         },
       ],
     },
@@ -278,12 +255,19 @@ export function visibleSections(
    */
   pages?: readonly AppPage[],
 ): NavSection[] {
-  const blockedHrefs =
+  const blocked =
     pages === undefined
-      ? new Set<string>()
-      : new Set(
+      ? null
+      : {
+        hrefs: new Set<string>(
           APP_PAGES.filter((page) => !pages.includes(page.key)).map((page) => page.href),
-        );
+        ),
+        has: (page: AppPage) => pages.includes(page),
+      };
+
+  /** An item is out when its own page is unassigned, or the one it belongs to is. */
+  const isBlocked = (item: NavItem) =>
+    blocked !== null && (blocked.hrefs.has(item.href) || (item.page ? !blocked.has(item.page) : false));
 
   // Filter children as well as top-level items, so what this returns is exactly
   // what the role may see — the renderer never has to re-check.
@@ -303,7 +287,7 @@ export function visibleSections(
     .map((section) => ({
       ...section,
       items: section.items
-        .filter((item) => item.roles.includes(role) && !blockedHrefs.has(item.href))
+        .filter((item) => item.roles.includes(role) && !isBlocked(item))
         .map(prepare),
     }))
     .filter((section) => section.items.length > 0);

@@ -17,6 +17,7 @@ import { syncTaskList } from "@/lib/boards";
 import { hoursToMinutes } from "@/lib/domain";
 import { formatMinutes } from "@/lib/duration";
 import { isoToDate, priorityToDb, taskStatusToDb } from "@/lib/mappers";
+import { notify } from "@/lib/notifications";
 import { validateAttachmentFile, validateImageFile } from "@/lib/r2";
 import { subtreeIds } from "@/lib/subtask-tree";
 import {
@@ -88,7 +89,7 @@ async function recordActivity(
 async function findTask(taskId: string, workspaceId: string) {
   return prisma.task.findFirst({
     where: { id: taskId, project: { workspaceId } },
-    select: { id: true, projectId: true, billable: true, title: true },
+    select: { id: true, projectId: true, title: true },
   });
 }
 
@@ -111,6 +112,11 @@ export async function updateTaskAction(input: unknown): Promise<ActionResult> {
 
   const task = await findTask(data.taskId, user.workspaceId);
   if (!task) return NOT_FOUND;
+
+  const before = await prisma.taskAssignee.findMany({
+    where: { taskId: task.id },
+    select: { userId: true },
+  });
 
   // Both lists are ids the client chose, so confirm each one is real and in
   // this workspace before writing it — otherwise a crafted request could
@@ -137,7 +143,6 @@ export async function updateTaskAction(input: unknown): Promise<ActionResult> {
         status: taskStatusToDb[data.status as TaskStatus],
         priority: priorityToDb[data.priority as Priority],
         estimateMinutes: hoursToMinutes(data.estimateHours),
-        billable: data.billable,
         dueDate: isoToDate(data.dueDate),
         assignees: { create: members.map((row) => ({ userId: row.userId })) },
         labels: { create: labels.map((row) => ({ labelId: row.id })) },
@@ -148,6 +153,18 @@ export async function updateTaskAction(input: unknown): Promise<ActionResult> {
   // The dialog can change the status; the card has to follow it to a list
   // that counts as that status, or the board and the reports would disagree.
   await syncTaskList(prisma, task.id);
+
+  // Only the people who were not already on it — a rename should not ping
+  // everybody who has had the task all along.
+  const had = new Set(before.map((row) => row.userId));
+  await notify(prisma, {
+    workspaceId: user.workspaceId,
+    userIds: members.map((row) => row.userId).filter((id) => !had.has(id)),
+    actorId: user.id,
+    kind: "task-assigned",
+    title: `You were assigned "${data.title}"`,
+    href: `/projects/project/${task.projectId}/tasks/${task.id}`,
+  });
 
   refreshTask(task.projectId, task.id);
   return { ok: true };
@@ -203,6 +220,26 @@ async function findSubtask(subtaskId: string, workspaceId: string) {
   });
 }
 
+/**
+ * The assignee to store: null for "nobody", the id when that person is on the
+ * task, or false when they are not — a subtask goes to someone already doing
+ * the task, and an id from the client is never trusted to be one of them.
+ *
+ * `keepId` is whoever holds it today, who stays valid even if they have since
+ * been taken off the task: saving an unrelated edit must not silently drop
+ * them.
+ */
+async function resolveAssignee(assigneeId: string, taskId: string, keepId: string | null = null) {
+  if (!assigneeId) return null;
+  if (assigneeId === keepId) return assigneeId;
+
+  const onTask = await prisma.taskAssignee.findFirst({
+    where: { taskId, userId: assigneeId },
+    select: { userId: true },
+  });
+  return onTask ? onTask.userId : false;
+}
+
 /** Whether `subtaskId` is a subtask of `taskId` — ids arrive from the client. */
 async function subtaskBelongsTo(subtaskId: string, taskId: string) {
   const found = await prisma.subtask.findFirst({
@@ -232,6 +269,9 @@ export async function createSubtaskAction(
     return { ok: false, error: "That subtask no longer exists." };
   }
 
+  const assigneeId = await resolveAssignee(data.assigneeId, task.id);
+  if (assigneeId === false) return { ok: false, error: "That person is not on this task." };
+
   const count = await prisma.subtask.count({ where: { taskId: task.id } });
   if (count >= MAX_SUBTASKS_PER_TASK) {
     return { ok: false, error: `A task can hold up to ${MAX_SUBTASKS_PER_TASK} subtasks.` };
@@ -250,10 +290,21 @@ export async function createSubtaskAction(
       parentId: data.parentId,
       title: data.title,
       description: data.description,
+      assigneeId,
       estimateMinutes: data.estimateMinutes,
       position: (last?.position ?? -1) + 1,
     },
     select: { id: true },
+  });
+
+  await notify(prisma, {
+    workspaceId: user.workspaceId,
+    userIds: assigneeId ? [assigneeId] : [],
+    actorId: user.id,
+    kind: "subtask-assigned",
+    title: `You were assigned "${data.title}"`,
+    body: `A subtask of ${task.title}.`,
+    href: `/projects/project/${task.projectId}/tasks/${task.id}`,
   });
 
   refreshTask(task.projectId, task.id);
@@ -276,15 +327,35 @@ export async function updateSubtaskAction(input: unknown): Promise<ActionResult>
   const subtask = await findSubtask(data.subtaskId, user.workspaceId);
   if (!subtask) return NOT_FOUND;
 
+  const assigneeId =
+    data.assigneeId === undefined
+      ? undefined
+      : await resolveAssignee(data.assigneeId, subtask.task.id, subtask.assigneeId);
+  if (assigneeId === false) return { ok: false, error: "That person is not on this task." };
+
   await prisma.subtask.update({
     where: { id: subtask.id },
     data: {
       title: data.title,
       description: data.description,
+      assigneeId,
       estimateMinutes: data.estimateMinutes,
       status: data.status ? taskStatusToDb[data.status as TaskStatus] : undefined,
     },
   });
+
+  // Only a change of hands is news; re-saving the same person is not.
+  if (assigneeId && assigneeId !== subtask.assigneeId) {
+    await notify(prisma, {
+      workspaceId: user.workspaceId,
+      userIds: [assigneeId],
+      actorId: user.id,
+      kind: "subtask-assigned",
+      title: `You were assigned "${data.title ?? subtask.title}"`,
+      body: `A subtask of ${subtask.task.title}.`,
+      href: `/projects/project/${subtask.task.projectId}/tasks/${subtask.task.id}`,
+    });
+  }
 
   refreshTask(subtask.task.projectId, subtask.task.id);
   return { ok: true };
@@ -400,21 +471,18 @@ async function commitTimer(timer: {
   taskId: string;
   userId: string;
   startedAt: Date;
+  pausedAt: Date | null;
   note: string;
   subtaskId: string | null;
 }) {
-  const endedAt = new Date();
+  // A paused timer stopped counting when it was paused, not now.
+  const endedAt = timer.pausedAt ?? new Date();
   const seconds = Math.floor((endedAt.getTime() - timer.startedAt.getTime()) / 1000);
 
   if (seconds < MIN_TRACKED_SECONDS) {
     await prisma.taskTimer.delete({ where: { id: timer.id } });
     return 0;
   }
-
-  const task = await prisma.task.findUnique({
-    where: { id: timer.taskId },
-    select: { billable: true },
-  });
 
   const minutes = Math.round(seconds / 60);
 
@@ -429,7 +497,6 @@ async function commitTimer(timer: {
         minutes,
         startedAt: timer.startedAt,
         endedAt,
-        billable: task?.billable ?? true,
         note: timer.note,
         subtaskId: timer.subtaskId,
       },
@@ -523,6 +590,45 @@ export async function stopTimerAction(): Promise<ActionResult> {
   return { ok: true };
 }
 
+/** Freeze the caller's timer. Nothing is recorded until it is stopped. */
+export async function pauseTimerAction(): Promise<ActionResult> {
+  const user = await requirePermission("time.log");
+
+  const timer = await prisma.taskTimer.findUnique({
+    where: { userId: user.id },
+    include: { task: { select: { projectId: true } } },
+  });
+  if (!timer) return { ok: false, error: "No timer is running." };
+  if (timer.pausedAt) return { ok: true };
+
+  await prisma.taskTimer.update({ where: { id: timer.id }, data: { pausedAt: new Date() } });
+  refreshTask(timer.task.projectId, timer.taskId);
+  return { ok: true };
+}
+
+/**
+ * Carry on after a pause. `startedAt` moves forward by the paused stretch, so
+ * the elapsed time — always `now - startedAt` — leaves the pause out.
+ */
+export async function resumeTimerAction(): Promise<ActionResult> {
+  const user = await requirePermission("time.log");
+
+  const timer = await prisma.taskTimer.findUnique({
+    where: { userId: user.id },
+    include: { task: { select: { projectId: true } } },
+  });
+  if (!timer) return { ok: false, error: "No timer is running." };
+  if (!timer.pausedAt) return { ok: true };
+
+  const paused = Date.now() - timer.pausedAt.getTime();
+  await prisma.taskTimer.update({
+    where: { id: timer.id },
+    data: { startedAt: new Date(timer.startedAt.getTime() + paused), pausedAt: null },
+  });
+  refreshTask(timer.task.projectId, timer.taskId);
+  return { ok: true };
+}
+
 /** Throw the running timer away without recording anything. */
 export async function discardTimerAction(): Promise<ActionResult> {
   const user = await requirePermission("time.log");
@@ -597,7 +703,6 @@ export async function addTimeEntryAction(input: unknown): Promise<ActionResult> 
       minutes: resolved.minutes,
       startedAt: resolved.startedAt,
       endedAt: resolved.endedAt,
-      billable: task.billable,
       note: data.note,
       subtaskId: data.subtaskId ?? null,
     },

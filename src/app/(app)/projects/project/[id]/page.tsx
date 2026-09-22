@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CircleCheck, Clock, ListTodo, TrendingUp } from "lucide-react";
+import { ArrowLeft, CircleCheck, Clock, ListTodo } from "lucide-react";
 import {
   ProjectMembersCard,
   type ProjectMemberRow,
@@ -12,10 +12,8 @@ import { Progress } from "@/components/ui/progress";
 import { formatDay } from "@/lib/domain";
 import { can } from "@/lib/permissions";
 import { getMembers, getProject, getProjectStats, getTeams } from "@/lib/queries";
-import { probe } from "@/lib/probe";
 import { getSessionUser, requireUser } from "@/lib/session";
 import { statusVariant, taskStatusColor } from "@/lib/status";
-import { formatPkr } from "@/lib/utils";
 
 export async function generateMetadata({
   params,
@@ -30,7 +28,6 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
   const viewer = await requireUser();
   const { id } = await params;
   const project = await getProject(viewer.workspaceId, id);
-  probe("overview", { id, workspaceId: viewer.workspaceId, found: Boolean(project) });
   if (!project) notFound();
 
   const [stats, members, teams] = await Promise.all([
@@ -58,11 +55,11 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <Link
           href="/projects"
           aria-label="Back to projects"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent hover:text-accent-foreground"
+          className="inline-flex h-8 w-8 items-center justify-center -mt-0.5 rounded-md transition-colors hover:bg-accent hover:text-accent-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
@@ -77,7 +74,7 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
       </div>
 
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
           <SummaryCard
             icon={<ListTodo className="h-3.5 w-3.5" />}
             label="Tasks"
@@ -97,12 +94,6 @@ export default async function ProjectPage({ params }: PageProps<"/projects/proje
             label="Logged hours"
             value={`${stats.hours}h`}
             hint={`of ${stats.estimateHours}h estimated`}
-          />
-          <SummaryCard
-            icon={<TrendingUp className="h-3.5 w-3.5" />}
-            label="Cost"
-            value={formatPkr(stats.cost)}
-            hint={`${stats.billableHours}h billable`}
           />
         </div>
 

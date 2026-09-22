@@ -52,30 +52,8 @@ export function ProjectSettingsForm({
         teamId: String(form.get("teamId") ?? ""),
         startDate: String(form.get("startDate") ?? ""),
         endDate: String(form.get("endDate") ?? ""),
-        defaultBillable: project.defaultBillable,
       });
       setNotice(result.ok ? "Saved." : (result.error ?? "Could not save."));
-      if (result.ok) router.refresh();
-    });
-  }
-
-  function saveBilling(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!project) return;
-    const form = new FormData(event.currentTarget);
-
-    startTransition(async () => {
-      const result = await updateProjectAction({
-        id: project.id,
-        name: project.name,
-        description: project.description,
-        status: project.status,
-        teamId: project.teamId ?? "",
-        startDate: project.startDate ?? "",
-        endDate: project.endDate ?? "",
-        defaultBillable: form.get("defaultBillable") === "yes",
-      });
-      setNotice(result.ok ? "Billing saved." : (result.error ?? "Could not save."));
       if (result.ok) router.refresh();
     });
   }
@@ -190,32 +168,6 @@ export function ProjectSettingsForm({
         </CardContent>
       </Card>
 
-      <Card className="shadow-none">
-        <CardHeader>
-          <CardTitle>Billing &amp; Rates</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={saveBilling}>
-            <Field
-              label="Default Billable"
-              hint="This affects new tasks created in this project."
-            >
-              <SelectField
-                key={`${project.id}-billable`}
-                name="defaultBillable"
-                defaultValue={project.defaultBillable ? "yes" : "no"}
-                options={[
-                  { value: "yes", label: "Yes — tasks are billable by default" },
-                  { value: "no", label: "No — tasks are non-billable by default" },
-                ]}
-              />
-            </Field>
-            <Button size="sm" type="submit" disabled={pending}>
-              Save Billing
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   );
 }

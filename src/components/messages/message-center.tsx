@@ -49,8 +49,8 @@ export function MessageCenter({
     <div className="grid h-[calc(100svh-9rem)] grid-cols-1 overflow-hidden rounded-lg border bg-card md:grid-cols-[300px_1fr]">
       <div className="flex min-h-0 flex-col border-b md:border-b-0 md:border-r">
         <div className="border-b p-3">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative flex items-center">
+            <Search className="absolute left-2.5 top-7 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}

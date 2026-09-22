@@ -136,6 +136,7 @@ export function SubtasksDialog({
           taskId={task.id}
           taskTitle={task.title}
           subtasks={subtasks}
+          members={task.assignees}
           running={running}
           canManage={canManage}
           canLog={canLog}

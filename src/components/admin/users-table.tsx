@@ -9,6 +9,7 @@ import {
   CircleAlert,
   Plus,
   LayoutGrid,
+  Pencil,
   Search,
   Trash2,
   UserCheck,
@@ -23,11 +24,13 @@ import {
 import { assignCustomRoleAction } from "@/app/(app)/admin/users/roles/actions";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { SelectField } from "@/components/ui/select-field";
+import { EditUserDialog } from "@/components/admin/edit-user-dialog";
 import { PageAccessDialog } from "@/components/admin/page-access-dialog";
 import type { AdminUser, CustomRoleRow } from "@/lib/admin";
 import type { Role, Team } from "@/lib/domain";
@@ -47,6 +50,7 @@ export function UsersTable({
   customRoles,
   canManageRoles,
   canDelete,
+  linkNames = false,
   currentUserId,
 }: {
   users: AdminUser[];
@@ -57,8 +61,10 @@ export function UsersTable({
   canAssignRoles: boolean;
   customRoles: CustomRoleRow[];
   canManageRoles: boolean;
-  /** `members.delete` — owner-only, and separate from managing roles. */
+  /** `members.delete` — admins only, and separate from managing roles. */
   canDelete: boolean;
+  /** Link each name to that person's analytics — the roster does, the directory does not. */
+  linkNames?: boolean;
   currentUserId: string;
 }) {
   const router = useRouter();
@@ -71,6 +77,7 @@ export function UsersTable({
   const [selected, setSelected] = useState<string[]>([]);
   const [removing, setRemoving] = useState<AdminUser | null>(null);
   const [accessFor, setAccessFor] = useState<AdminUser | null>(null);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -184,8 +191,8 @@ export function UsersTable({
     <div className="space-y-4">
       <Card className="shadow-none">
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative min-w-[220px] flex-1 -mt-3.5">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 text-muted-foreground" />
             <Input
               value={search}
               onChange={(event) => {
@@ -194,7 +201,7 @@ export function UsersTable({
               }}
               placeholder="Search name, email or designation"
               aria-label="Search users"
-              className="pl-8"
+              className="h-9 pl-8"
             />
           </div>
 
@@ -205,7 +212,7 @@ export function UsersTable({
               resetTo(1);
             }}
             aria-label="Filter by role"
-            className="w-[150px]"
+            className="w-[150px] mt-0"
             options={[
               { value: "all", label: "All roles" },
               ...ROLES.map((role) => ({ value: role, label: roleLabel(role) })),
@@ -219,7 +226,7 @@ export function UsersTable({
               resetTo(1);
             }}
             aria-label="Filter by team"
-            className="w-[150px]"
+            className="w-[150px] mt-0"
             options={[
               { value: "all", label: "All teams" },
               ...teams.map((team) => ({ value: team.id, label: team.name })),
@@ -235,7 +242,7 @@ export function UsersTable({
               }
             }
             aria-label="Filter by status"
-            className="w-[140px]"
+            className="w-[140px] mt-0"
             options={[
               { value: "all", label: "All statuses" },
               { value: "active", label: "Active" },
@@ -304,15 +311,13 @@ export function UsersTable({
                 <tr className="text-left text-xs text-muted-foreground">
                   {canInvite ? (
                     <th className="w-10 px-3 py-2">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={allSelected}
                         aria-label="Select all on this page"
                         disabled={selectable.length === 0}
-                        onChange={(event) =>
-                          setSelected(event.target.checked ? selectable : [])
+                        onCheckedChange={(checked) =>
+                          setSelected(checked === true ? selectable : [])
                         }
-                        className="h-4 w-4 accent-[hsl(var(--primary))]"
                       />
                     </th>
                   ) : null}
@@ -333,21 +338,19 @@ export function UsersTable({
                   <tr key={user.id} className="border-b transition-colors hover:bg-muted/50">
                     {canInvite ? (
                       <td className="px-3 py-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selected.includes(user.id)}
                           // Bulk enable/disable only acts on members of this
                           // workspace, so an outsider cannot be selected.
                           disabled={user.id === currentUserId || !user.inWorkspace}
                           aria-label={`Select ${user.name}`}
-                          onChange={() =>
+                          onCheckedChange={() =>
                             setSelected((current) =>
                               current.includes(user.id)
                                 ? current.filter((id) => id !== user.id)
                                 : [...current, user.id],
                             )
                           }
-                          className="h-4 w-4 accent-[hsl(var(--primary))]"
                         />
                       </td>
                     ) : null}
@@ -361,7 +364,16 @@ export function UsersTable({
                         />
                         <span className="min-w-0">
                           <span className="block truncate font-medium">
-                            {user.name}
+                            {linkNames && user.inWorkspace ? (
+                              <Link
+                                href={`/team-members/${user.id}`}
+                                className="hover:underline"
+                              >
+                                {user.name}
+                              </Link>
+                            ) : (
+                              user.name
+                            )}
                             {user.id === currentUserId ? (
                               <span className="ml-1 text-xs text-muted-foreground">(you)</span>
                             ) : null}
@@ -446,6 +458,18 @@ export function UsersTable({
                             <LayoutGrid className="h-4 w-4" />
                           </Button>
                         ) : null}
+                        {user.inWorkspace ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={pending}
+                            onClick={() => setEditing(user)}
+                            aria-label={`Edit ${user.name}`}
+                            title="Edit"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                         {canDelete && user.id !== currentUserId && user.inWorkspace ? (
                           <Button
                             variant="ghost"
@@ -526,6 +550,16 @@ export function UsersTable({
             : ""
         }
       />
+
+      {/* Keyed so reopening on a different person starts from their values. */}
+      {editing ? (
+        <EditUserDialog
+          key={editing.id}
+          user={editing}
+          teams={teams}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
 
       {/* Keyed so reopening on a different person resets the tick boxes. */}
       {accessFor && accessFor.role ? (

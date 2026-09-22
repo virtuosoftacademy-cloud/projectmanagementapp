@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDay } from "@/lib/domain";
 import { getEntryDetails, getHoursByDay, getMetrics } from "@/lib/queries";
 import { requirePage } from "@/lib/session";
-import { cn, formatDuration, formatPkr } from "@/lib/utils";
+import { cn, formatDuration } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Analytics" };
 
@@ -31,7 +31,7 @@ export default async function AnalyticsPage() {
         <div>
           <h1 className="text-2xl font-bold leading-tight tracking-tight">Analytics</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Timesheets, costs &amp; variance analysis
+            Timesheets &amp; variance analysis
           </p>
         </div>
         <Button variant="outline" size="sm">
@@ -57,11 +57,9 @@ export default async function AnalyticsPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Metric label="Total Logged" value={formatDuration(metrics.totalHoursExact)} />
         <Metric
-          label="Billable"
-          value={formatDuration(metrics.billableHoursExact)}
-          hint={`${metrics.billablePercent}% of total`}
+          label="Tracked"
+          value={formatDuration(metrics.totalHoursExact)}
         />
-        <Metric label="Cost (PKR)" value={formatPkr(metrics.billableRevenue)} />
         <Metric
           label="Variance"
           value={formatDuration(Math.abs(variance))}
@@ -99,8 +97,6 @@ export default async function AnalyticsPage() {
                   <Th>Task</Th>
                   <Th>Project</Th>
                   <Th className="text-right">Duration</Th>
-                  <Th>Billable</Th>
-                  <Th className="text-right">Cost (PKR)</Th>
                   <Th className="text-right">Variance</Th>
                 </tr>
               </thead>
@@ -124,10 +120,6 @@ export default async function AnalyticsPage() {
                     <Td className="text-muted-foreground">{entry.project.name}</Td>
                     <Td className="whitespace-nowrap text-right font-mono">
                       {formatDuration(entry.hours)}
-                    </Td>
-                    <Td>{entry.billable ? "Yes" : "No"}</Td>
-                    <Td className="whitespace-nowrap text-right font-mono">
-                      {entry.billable ? formatPkr(entry.cost) : "—"}
                     </Td>
                     <Td
                       className={cn(

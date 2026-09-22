@@ -13,9 +13,6 @@ import { SelectField } from "@/components/ui/select-field";
 import type { Team } from "@/lib/domain";
 import { ROLES, roleLabel } from "@/lib/permissions";
 
-/** Radix rejects an empty option value, so "no team" travels as a sentinel. */
-const NO_TEAM = "none";
-
 export type AddableUser = { id: string; name: string; email: string };
 
 /**
@@ -47,7 +44,6 @@ export function AddMemberDialog({
     setError(null);
 
     const form = new FormData(event.currentTarget);
-    if (form.get("teamId") === NO_TEAM) form.set("teamId", "");
 
     startTransition(async () => {
       const result = await addMemberAction(form);
@@ -117,15 +113,12 @@ export function AddMemberDialog({
                 />
               </Field>
 
-              <Field label="Team" hint="Leave as No team to keep their current one.">
+              <Field label="Team" required hint="Which team they work on.">
                 <SelectField
                   name="teamId"
-                  defaultValue={NO_TEAM}
+                  placeholder="Select a team"
                   disabled={teams.length === 0}
-                  options={[
-                    { value: NO_TEAM, label: "No team" },
-                    ...teams.map((team) => ({ value: team.id, label: team.name })),
-                  ]}
+                  options={teams.map((team) => ({ value: team.id, label: team.name }))}
                 />
               </Field>
             </div>

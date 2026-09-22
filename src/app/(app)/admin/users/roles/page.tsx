@@ -23,13 +23,9 @@ export const metadata: Metadata = { title: "Roles" };
 
 /** Plain-English summary and swatch per built-in role. */
 const ROLE_META: Record<Role, { description: string; color: string }> = {
-  owner: {
+  admin: {
     description: "Full control, including role management and deleting accounts.",
     color: "hsl(var(--primary))",
-  },
-  admin: {
-    description: "Runs the workspace day to day, but cannot delete accounts.",
-    color: "#a73cdd",
   },
   manager: {
     description: "Leads projects and people without workspace-level settings.",
@@ -289,7 +285,7 @@ export default async function RolesPage() {
         })}
       </div>
 
-      <Card className="shadow-none">
+      {/* <Card className="shadow-none">
         <CardHeader>
           <CardTitle>Which roles are fixed, and why</CardTitle>
         </CardHeader>
@@ -336,7 +332,7 @@ export default async function RolesPage() {
             so it applies on their next sign-in.
           </p>
         </CardContent>
-      </Card>
+      </Card> */}
     </div>
   );
 }

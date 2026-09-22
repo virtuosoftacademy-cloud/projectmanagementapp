@@ -1,14 +1,12 @@
 import { Target } from "lucide-react";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import type { Member } from "@/lib/domain";
-import { formatPkr } from "@/lib/utils";
 
 export type MemberRow = {
   member: Member;
-  stats: { hours: number; tasksDone: number; tasksTotal: number; cost: number; utilization: number };
+  stats: { hours: number; tasksDone: number; tasksTotal: number; utilization: number };
 };
 
 export function TeamTab({ rows }: { rows: MemberRow[] }) {
@@ -24,13 +22,11 @@ export function TeamTab({ rows }: { rows: MemberRow[] }) {
                   <p className="truncate text-sm font-medium">{member.name}</p>
                   <p className="text-xs capitalize text-muted-foreground">{member.role}</p>
                 </div>
-                <Badge variant="secondary">Rs {member.hourlyRate}/h</Badge>
               </div>
 
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+              <div className="mt-4 grid grid-cols-2 gap-2 text-center">
                 <Tile value={`${stats.hours.toFixed(1)}h`} label="Logged" />
                 <Tile value={`${stats.tasksDone}/${stats.tasksTotal}`} label="Tasks" />
-                <Tile value={formatPkr(stats.cost)} label="Cost" />
               </div>
 
               <div className="mt-3">

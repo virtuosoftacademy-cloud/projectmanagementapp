@@ -2,6 +2,7 @@ import { SessionProvider } from "next-auth/react";
 import { auth } from "@/lib/auth";
 import { AppShell } from "@/components/app-shell";
 import {
+  getNotifications,
   getOverdueTasks,
   getProjects,
   getRunningTimer,
@@ -25,6 +26,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     canCreateWorkspace,
     canManageFeatures,
     runningTimer,
+    notifications,
   ] = await Promise.all([
     getProjects(user.workspaceId, await projectScope()),
     getTeams(user.workspaceId),
@@ -37,6 +39,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     hasPermission("workspace.settings"),
     // Read here rather than per page, so the header can show it everywhere.
     getRunningTimer(user.workspaceId, user.id),
+    getNotifications(user.workspaceId, user.id),
   ]);
 
   return (
@@ -58,6 +61,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         // Sidebar count badges, resolved server-side rather than polled.
         badges={{ "/projects/tasks": overdue.length }}
         runningTimer={runningTimer}
+        notifications={notifications.items}
+        unreadNotifications={notifications.unread}
       >
         {children}
       </AppShell>

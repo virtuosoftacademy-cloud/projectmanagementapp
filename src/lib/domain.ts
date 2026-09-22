@@ -10,7 +10,7 @@
  * boundary, so nothing in the UI needs to know about the storage format.
  */
 
-export type Role = "owner" | "admin" | "manager" | "member" | "viewer" | "guest";
+export type Role = "admin" | "manager" | "member" | "viewer" | "guest";
 
 /**
  * How the app renders for one person, stored on their account.
@@ -158,10 +158,23 @@ export type Project = {
   teamId: string | null;
   startDate: string | null;
   endDate: string | null;
-  defaultBillable: boolean;
   /** Which optional sub-pages this project has switched on. */
   features: ProjectFeature[];
   members: Person[];
+};
+
+/** One bell entry: something that happened, addressed to one person. */
+export type AppNotification = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  /** Where clicking it goes, or "" when it leads nowhere. */
+  href: string;
+  /** Who caused it, when the app itself did not. */
+  actor: Person | null;
+  createdAt: string;
+  read: boolean;
 };
 
 /** A tag that can be put on tasks. Scoped to one workspace. */
@@ -181,7 +194,6 @@ export type Task = {
   assignees: Person[];
   labels: Label[];
   estimateHours: number;
-  billable: boolean;
   dueDate: string | null;
   subtasksTotal: number;
   subtasksDone: number;
@@ -224,7 +236,6 @@ export type TimeEntry = {
   userId: string;
   taskId: string;
   hours: number;
-  billable: boolean;
   note: string;
   /**
    * The wall-clock span, when it is known. A timer records both; a manual
@@ -252,6 +263,8 @@ export type RunningTimer = {
   projectId: string;
   projectName: string;
   startedAt: string;
+  /** Set while paused; the clock shows the time up to this moment. */
+  pausedAt: string | null;
   note: string;
   /** Set when the timer runs on one subtask of the task rather than the task as a whole. */
   subtaskId: string | null;
@@ -294,6 +307,8 @@ export type Subtask = {
   parentId: string | null;
   title: string;
   description: string;
+  /** Who is doing it, or null. */
+  assignee: Person | null;
   status: TaskStatus;
   estimateMinutes: number;
   position: number;

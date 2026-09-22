@@ -14,7 +14,6 @@ import { roleLabel } from "@/lib/permissions";
 import { getMember, getMemberStats, getProjectStats, getProjects } from "@/lib/queries";
 import { projectScope, requirePage } from "@/lib/session";
 import { statusVariant } from "@/lib/status";
-import { formatPkr } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "My Profile" };
 
@@ -47,16 +46,16 @@ export default async function ProfilePage() {
       </div>
 
       <Card className="shadow-none">
-        <CardContent className="p-6">
-          <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+        <CardContent className="py-4 px-6">
+          <div className="flex flex-col justify-between items-start gap-5 sm:flex-row">
             <ImageUpload
               kind="avatar"
               shape="round"
               label="Profile photo"
               currentUrl={profile?.image ?? null}
-              className="w-full sm:max-w-md"
+              className="w-full sm:max-w-md flex-1"
             />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-semibold">{viewer.name}</h2>
                 <Badge variant="outline">{roleLabel(viewer.role)}</Badge>
@@ -93,11 +92,7 @@ export default async function ProfilePage() {
                       <Input defaultValue={viewer.email} disabled />
                     </Field>
                   </div>
-                  <Separator />
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Hourly Rate (PKR)">
-                      <Input type="number" defaultValue={profile?.hourlyRate ?? 0} />
-                    </Field>
                     <Field label="Monthly Hours">
                       <Input type="number" defaultValue={profile?.monthlyHours ?? 0} />
                     </Field>
@@ -136,8 +131,7 @@ export default async function ProfilePage() {
                         </span>
                       </div>
                       <p className="font-mono text-xs text-muted-foreground">
-                        {projectStat.done}/{projectStat.taskCount} tasks · {projectStat.hours}h ·{" "}
-                        {formatPkr(projectStat.cost)}
+                        {projectStat.done}/{projectStat.taskCount} tasks · {projectStat.hours}h
                       </p>
                     </CardContent>
                   </Card>
