@@ -18,14 +18,14 @@ Fill in `.env`:
 - `AUTH_SECRET` — generate with `npx auth secret`
 - `SEED_PASSWORD` — the password every seeded demo account gets (8+ characters)
 
-Create the database, apply the schema, and seed the demo accounts:
+Create the database, apply the schema, then seed the workspace, its roles and an admin:
 
 ```bash
 npm run db:migrate
 ```
 
 ```bash
-npm run db:roles
+npm run db:seed
 ```
 
 Then start the app:
@@ -34,11 +34,10 @@ Then start the app:
 npm run dev
 ```
 
-Sign in at `/signin` with any seeded address — `alex@company.com` (Owner),
-`sarah@company.com` (Admin), `emma@company.com` (Manager), `mike@company.com` (Member),
-`david@company.com` (Viewer), `client@external.com` (Guest) — and your `SEED_PASSWORD`.
-Each one lands on a different slice of the app, which is the quickest way to see the
-permission matrix at work.
+Sign in at `/signin` as `admin@virtuosoft.com` with your `SEED_PASSWORD` — or set
+`SEED_ADMIN_EMAIL` before seeding to use your own address. That account is the workspace's
+admin; everyone else is invited from Admin → Users, where you pick their role and the pages
+they may reach.
 
 ## Scripts
 
@@ -48,12 +47,12 @@ permission matrix at work.
 | `npm run build` | Production build |
 | `npm run db:migrate` | Create/apply a migration (dev) |
 | `npm run db:deploy` | Apply pending migrations (production) |
-| `npm run db:roles` | Seed the editable roles into every workspace |
+| `npm run db:seed` | Seed the `virtuosoft` workspace, its roles and an admin |
 | `npm run db:studio` | Browse the database |
 
 ## Authorization
 
-Roles are `OWNER`, `ADMIN`, `MANAGER`, `MEMBER`, `VIEWER`, `GUEST`.
+Roles are `ADMIN`, `MANAGER`, `MEMBER`, `VIEWER`, `GUEST`.
 
 - [`src/lib/permissions.ts`](src/lib/permissions.ts) is the single source of truth: a permission →
   roles matrix. The table rendered on `/settings` and every `can()` check read from it, so
@@ -132,7 +131,14 @@ entries, campaigns, landing sections, messages and activity.
 The roles a workspace starts with live in
 [`src/lib/default-roles.ts`](src/lib/default-roles.ts), which is what both workspace
 creation and [`prisma/seed.ts`](prisma/seed.ts) call — so a seeded workspace and a
-newly created one can never disagree. Seeding is additive: a role
-already present is left as it is, which is what makes `npm run db:roles` idempotent.
-There is no demo data: a seed that invents accounts is a liability the moment it runs
-somewhere real, and the build runs this on deploy.
+newly created one can never disagree.
+
+The seed touches one workspace, `virtuosoft`: it creates the workspace if it is missing,
+its four editable roles, and an admin account from `SEED_ADMIN_EMAIL` / `SEED_PASSWORD`.
+Existing accounts are never disturbed: if the address is already taken the seed leaves that
+account entirely alone — it does not rename it, reset its password, or add it to the
+workspace, since joining a real person's account would change what they can reach. Grant
+that access from Admin → Users instead. Everything else is additive too, so re-running
+never undoes an edit made in the app. Other workspaces are
+ignored entirely. There is no demo data: a seed that invents projects and accounts is a
+liability the moment it runs somewhere real, and the build runs this on deploy.

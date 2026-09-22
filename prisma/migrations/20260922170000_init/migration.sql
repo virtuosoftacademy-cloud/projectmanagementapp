@@ -48,7 +48,7 @@ CREATE TABLE `CustomRole` (
     `label` VARCHAR(191) NOT NULL,
     `description` TEXT NOT NULL DEFAULT '',
     `permissions` JSON NOT NULL,
-    `inheritsFrom` ENUM('OWNER', 'ADMIN', 'MANAGER', 'MEMBER', 'VIEWER', 'GUEST') NOT NULL,
+    `inheritsFrom` ENUM('ADMIN', 'MANAGER', 'MEMBER', 'VIEWER', 'GUEST') NOT NULL,
     `isActive` BOOLEAN NOT NULL DEFAULT true,
     `isSystem` BOOLEAN NOT NULL DEFAULT false,
     `createdById` VARCHAR(191) NULL,
@@ -65,7 +65,7 @@ CREATE TABLE `CustomRole` (
 CREATE TABLE `WorkspaceMember` (
     `workspaceId` VARCHAR(191) NOT NULL,
     `userId` VARCHAR(191) NOT NULL,
-    `role` ENUM('OWNER', 'ADMIN', 'MANAGER', 'MEMBER', 'VIEWER', 'GUEST') NOT NULL DEFAULT 'MEMBER',
+    `role` ENUM('ADMIN', 'MANAGER', 'MEMBER', 'VIEWER', 'GUEST') NOT NULL DEFAULT 'MEMBER',
     `joinedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `customRoleId` VARCHAR(191) NULL,
     `pages` JSON NULL,
@@ -105,7 +105,6 @@ CREATE TABLE `Project` (
     `teamId` VARCHAR(191) NULL,
     `startDate` DATE NULL,
     `endDate` DATE NULL,
-    `defaultBillable` BOOLEAN NOT NULL DEFAULT true,
     `features` JSON NULL,
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updatedAt` DATETIME(3) NOT NULL,
@@ -183,7 +182,6 @@ CREATE TABLE `Task` (
     `status` ENUM('TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE') NOT NULL DEFAULT 'TODO',
     `priority` ENUM('LOW', 'MEDIUM', 'HIGH', 'URGENT') NOT NULL DEFAULT 'MEDIUM',
     `estimateMinutes` INTEGER NOT NULL DEFAULT 0,
-    `billable` BOOLEAN NOT NULL DEFAULT true,
     `dueDate` DATE NULL,
     `position` INTEGER NOT NULL DEFAULT 0,
     `coverKey` VARCHAR(191) NULL,
@@ -206,6 +204,7 @@ CREATE TABLE `Subtask` (
     `parentId` VARCHAR(191) NULL,
     `title` VARCHAR(191) NOT NULL,
     `description` TEXT NOT NULL DEFAULT '',
+    `assigneeId` VARCHAR(191) NULL,
     `status` ENUM('TODO', 'IN_PROGRESS', 'IN_REVIEW', 'DONE') NOT NULL DEFAULT 'TODO',
     `estimateMinutes` INTEGER NOT NULL DEFAULT 0,
     `position` INTEGER NOT NULL DEFAULT 0,
@@ -214,6 +213,7 @@ CREATE TABLE `Subtask` (
 
     INDEX `Subtask_taskId_idx`(`taskId`),
     INDEX `Subtask_parentId_idx`(`parentId`),
+    INDEX `Subtask_assigneeId_idx`(`assigneeId`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -235,7 +235,6 @@ CREATE TABLE `TimeEntry` (
     `minutes` INTEGER NOT NULL,
     `startedAt` DATETIME(3) NULL,
     `endedAt` DATETIME(3) NULL,
-    `billable` BOOLEAN NOT NULL DEFAULT true,
     `note` TEXT NOT NULL DEFAULT '',
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `subtaskId` VARCHAR(191) NULL,
@@ -313,6 +312,25 @@ CREATE TABLE `ActivityEntry` (
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
+CREATE TABLE `Notification` (
+    `id` VARCHAR(191) NOT NULL,
+    `workspaceId` VARCHAR(191) NOT NULL,
+    `userId` VARCHAR(191) NOT NULL,
+    `actorId` VARCHAR(191) NULL,
+    `kind` VARCHAR(191) NOT NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `body` TEXT NOT NULL DEFAULT '',
+    `href` VARCHAR(191) NOT NULL DEFAULT '',
+    `readAt` DATETIME(3) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+
+    INDEX `Notification_workspaceId_userId_readAt_idx`(`workspaceId`, `userId`, `readAt`),
+    INDEX `Notification_userId_createdAt_idx`(`userId`, `createdAt`),
+    INDEX `Notification_actorId_idx`(`actorId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
 CREATE TABLE `Account` (
     `id` VARCHAR(191) NOT NULL,
     `userId` VARCHAR(191) NOT NULL,
@@ -360,6 +378,7 @@ CREATE TABLE `TaskTimer` (
     `userId` VARCHAR(191) NOT NULL,
     `taskId` VARCHAR(191) NOT NULL,
     `startedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `pausedAt` DATETIME(3) NULL,
     `note` TEXT NOT NULL DEFAULT '',
     `subtaskId` VARCHAR(191) NULL,
 
@@ -479,6 +498,9 @@ ALTER TABLE `Task` ADD CONSTRAINT `Task_listId_fkey` FOREIGN KEY (`listId`) REFE
 ALTER TABLE `Subtask` ADD CONSTRAINT `Subtask_taskId_fkey` FOREIGN KEY (`taskId`) REFERENCES `Task`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `Subtask` ADD CONSTRAINT `Subtask_assigneeId_fkey` FOREIGN KEY (`assigneeId`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `Subtask` ADD CONSTRAINT `Subtask_parentId_fkey` FOREIGN KEY (`parentId`) REFERENCES `Subtask`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -516,6 +538,15 @@ ALTER TABLE `ActivityEntry` ADD CONSTRAINT `ActivityEntry_workspaceId_fkey` FORE
 
 -- AddForeignKey
 ALTER TABLE `ActivityEntry` ADD CONSTRAINT `ActivityEntry_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Notification` ADD CONSTRAINT `Notification_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `Workspace`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Notification` ADD CONSTRAINT `Notification_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `Notification` ADD CONSTRAINT `Notification_actorId_fkey` FOREIGN KEY (`actorId`) REFERENCES `User`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `Account` ADD CONSTRAINT `Account_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `User`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
